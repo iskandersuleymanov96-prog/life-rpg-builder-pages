@@ -1,12 +1,12 @@
-# Life RPG Builder
+# Live RPG: Worldwalker
 
-Life RPG Builder is a dark-mode MVP for a customizable personal RPG system: hero profile, life spheres, character stats, quests, boss fights, achievements, transformations, coin rewards, import/export, and weekly review.
+Live RPG: Worldwalker is a dark-mode MVP for a customizable personal RPG system: hero profile, life spheres, character stats, quests, trials, badges, transformations, coin rewards, import/export, custom backgrounds, and progress review.
 
 This repository is intentionally static for the first MVP pass. It runs without a package manager, so it can be opened locally, pushed to GitHub, and deployed to Vercel as a static app immediately.
 
 ## What is included
 
-- Version `0.3.0`
+- Version `0.4.0`
 - First-run hero creation wizard
 - Empty-world start instead of forced demo state
 - Generated premium hero visuals with selectable character identity
@@ -18,8 +18,10 @@ This repository is intentionally static for the first MVP pass. It runs without 
 - Quest log with daily, weekly, side, main, and boss quests
 - Daily quest replay by date instead of permanently locking repeatable habits
 - Daily XP cap to prevent progression inflation
-- Dedicated Boss Fights screen with template import and one-time reward groups
-- Dedicated Achievements screen with unlock logic
+- Dedicated Trials screen with template import and one-time reward groups
+- Dedicated Badges screen with unlock logic
+- Appearance Studio with built-in backgrounds, custom image upload, dim control, and compact density
+- Compact MacBook-friendly layout and reduced navigation surface
 - Progress journal for completions, boss wins, reward redemptions, imports, exports, and transformations
 - JSON import/export backup
 - Quest completion loop with XP, coins, domain XP, stat XP, level-ups, and local activity history

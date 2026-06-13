@@ -1,4 +1,7 @@
-const VERSION = "0.3.0";
+const VERSION = "0.4.0";
+const APP_NAME = "Live RPG";
+const APP_TITLE = "Live RPG: Worldwalker";
+const APP_TAGLINE = "Personal progress world";
 const STORAGE_KEY = "life-rpg-builder-state-v2";
 const DAILY_XP_CAP = 200;
 
@@ -48,6 +51,13 @@ const heroVisuals = [
   { id: "explorer", label: "Explorer Visionary", position: "94% 50%" },
 ];
 
+const backgroundPresets = {
+  worldwalker: { label: "Worldwalker", image: 'url("./assets/worldwalker-bg.png")' },
+  void: { label: "Deep Void", image: "none" },
+  atlas: { label: "Atlas Grid", image: "radial-gradient(circle at 55% 20%, rgba(114, 183, 255, 0.18), transparent 34%), linear-gradient(135deg, rgba(255,255,255,0.04), transparent 45%)" },
+  forge: { label: "Hero Forge", image: "radial-gradient(circle at 25% 25%, rgba(242, 195, 93, 0.16), transparent 30%), radial-gradient(circle at 75% 10%, rgba(114, 183, 255, 0.14), transparent 36%)" },
+};
+
 const bossTemplates = [
   { id: "boss-public-launch", title: "Public Launch", sphere: "Карьера", risk: "Публичная оценка", reward: "Новая видимость", xp: 900, coins: 260, rewardGroup: "public-launch", steps: ["Опубликовать артефакт", "Собрать реакцию", "Сделать вывод"] },
   { id: "boss-first-client", title: "First Paid Client", sphere: "Деньги", risk: "Отказ и цена", reward: "Деньги начали двигаться", xp: 1400, coins: 420, rewardGroup: "first-client", steps: ["Сформулировать оффер", "Сделать 5 касаний", "Закрыть оплату"] },
@@ -58,7 +68,7 @@ const bossTemplates = [
 
 const achievementCatalog = [
   { id: "first-quest", title: "Первый квест", category: "Старт", rarity: "common", condition: "Заверши любой квест.", test: (s) => s.progressLog.some((e) => e.type === "quest") },
-  { id: "first-boss", title: "Первый босс повержен", category: "Boss", rarity: "rare", condition: "Победи любого босса.", test: (s) => s.progressLog.some((e) => e.type === "boss") },
+  { id: "first-boss", title: "Первое испытание пройдено", category: "Trial", rarity: "rare", condition: "Пройди любое крупное испытание.", test: (s) => s.progressLog.some((e) => e.type === "boss") },
   { id: "backup-master", title: "Хранитель сохранения", category: "Система", rarity: "common", condition: "Сделай экспорт прогресса.", test: (s) => s.progressLog.some((e) => e.type === "export") },
   { id: "money-moving", title: "Money Is Moving", category: "Деньги", rarity: "rare", condition: "Набери 500 монет.", test: (s) => s.hero.coins >= 500 },
   { id: "creator-mode", title: "Creative Director Mode", category: "Творчество", rarity: "epic", condition: "Набери 500 XP в творчестве.", test: (s) => (byName(s.spheres, "Творчество")?.xp || 0) >= 500 },
@@ -88,7 +98,7 @@ const starterTemplates = {
     stats: ["Сила", "Дисциплина", "Фокус", "Мудрость"],
     quests: [
       ["Тренировка тела", "Силовой или кондиционный блок.", "Ежедневный", "Тело", "Нормальный", 60, 20, ["Сила", "Дисциплина"]],
-      ["Босс: 7 дней без срыва", "Соблюдать выбранный протокол неделю.", "Босс", "Дисциплина", "Босс", 420, 150, ["Дисциплина"]],
+      ["Trial: 7 дней без срыва", "Соблюдать выбранный протокол неделю.", "Босс", "Дисциплина", "Trial", 420, 150, ["Дисциплина"]],
     ],
   },
 };
@@ -112,6 +122,13 @@ const emptyState = {
     evolution: 0,
     visual: "creator",
   },
+  appearance: {
+    backgroundPreset: "worldwalker",
+    customBackground: "",
+    backgroundDim: 72,
+    density: "compact",
+  },
+  activeDetail: null,
   spheres: [],
   stats: [],
   quests: [],
@@ -154,6 +171,8 @@ function sanitizeState(raw) {
   const base = structuredClone(emptyState);
   const next = { ...base, ...(raw || {}), version: VERSION };
   next.hero = { ...base.hero, ...(raw?.hero || {}) };
+  next.appearance = { ...base.appearance, ...(raw?.appearance || {}) };
+  next.activeDetail = null;
   next.spheres = Array.isArray(raw?.spheres) ? raw.spheres : [];
   next.stats = Array.isArray(raw?.stats) ? raw.stats : [];
   next.quests = Array.isArray(raw?.quests) ? raw.quests : [];
@@ -184,17 +203,23 @@ function finalizeState(next = state, showUnlocks = true) {
       sphere: achievement.category,
       comment: achievement.condition,
     });
-    if (showUnlocks) toast(`Ачивка открыта: ${achievement.title}`);
+    if (showUnlocks) toast(`Badge открыт: ${achievement.title}`);
   });
   return next;
 }
 
 function applyTheme() {
   const theme = themes[state.theme] || themes.ice;
+  const appearance = state.appearance || emptyState.appearance;
+  const preset = backgroundPresets[appearance.backgroundPreset] || backgroundPresets.worldwalker;
+  const background = appearance.customBackground ? `url("${appearance.customBackground}")` : preset.image;
   document.documentElement.dataset.theme = state.theme;
+  document.documentElement.dataset.density = appearance.density || "compact";
   document.documentElement.style.setProperty("--accent", theme.accent);
   document.documentElement.style.setProperty("--accent-2", theme.accent2);
   document.documentElement.style.setProperty("--aura", theme.aura);
+  document.documentElement.style.setProperty("--scene-bg", background);
+  document.documentElement.style.setProperty("--scene-dim", String(Math.min(92, Math.max(35, Number(appearance.backgroundDim || 72))) / 100));
 }
 
 function xpForNext(level) {
@@ -265,6 +290,7 @@ function escapeHtml(value) {
 
 function setRoute(route) {
   state.route = route;
+  state.activeDetail = null;
   saveState();
   render();
 }
@@ -371,7 +397,7 @@ function importBossTemplates(showMessage = true) {
     state.bossFights.push({ ...boss, status: "Активен", completedSteps: [] });
     if (!byName(state.spheres, boss.sphere)) createSphere(boss.sphere);
   });
-  if (showMessage) toast("Boss fights добавлены.");
+  if (showMessage) toast("Trials добавлены.");
 }
 
 function completeQuest(id) {
@@ -465,7 +491,7 @@ function completeBoss(id) {
   });
   finalizeState(state);
   saveState();
-  toast(`Boss defeated: +${awardedXp} XP`);
+  toast(`Trial cleared: +${awardedXp} XP`);
   render();
 }
 
@@ -510,7 +536,7 @@ function hardReset() {
 
 function exportProgress() {
   const payload = {
-    app: "Life RPG Builder",
+    app: APP_TITLE,
     version: VERSION,
     schemaVersion: 3,
     exportedAt: new Date().toISOString(),
@@ -553,6 +579,41 @@ function importProgressFile(file) {
   reader.readAsText(file);
 }
 
+function importBackgroundFile(file) {
+  if (!file) return;
+  if (!file.type.startsWith("image/")) {
+    toast("Выбери изображение для фона.");
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    state.appearance.customBackground = String(reader.result);
+    state.appearance.backgroundPreset = "custom";
+    applyTheme();
+    saveState();
+    toast("Фон мира обновлён.");
+    render();
+  };
+  reader.readAsDataURL(file);
+}
+
+function setBackgroundPreset(preset) {
+  if (!backgroundPresets[preset]) return;
+  state.appearance.backgroundPreset = preset;
+  state.appearance.customBackground = "";
+  applyTheme();
+  saveState();
+  render();
+}
+
+function resetAppearance() {
+  state.appearance = structuredClone(emptyState.appearance);
+  applyTheme();
+  saveState();
+  toast("Внешний вид сброшен.");
+  render();
+}
+
 function setupShell(content) {
   return `
     <div class="layout setup-layout">
@@ -560,7 +621,7 @@ function setupShell(content) {
       <main class="main">
         <header class="topbar">
           <div>
-            <div class="version-line">Life RPG Builder v${VERSION}</div>
+            <div class="version-line">${APP_TITLE} v${VERSION}</div>
             <h2 class="page-title">Создай героя</h2>
             <p class="page-subtitle">Первый запуск: собери свою систему с нуля или импортируй шаблон.</p>
           </div>
@@ -607,7 +668,7 @@ function setupScreen() {
       </section>
     </div>
     <div class="setup-footer panel">
-      <button class="button" data-action="setup-prev">Назад</button>
+      <button class="button" data-action="setup-prev" ${state.setupStep === 0 ? "disabled" : ""}>Назад</button>
       <div class="setup-progress"><span style="width:${((state.setupStep + 1) / steps.length) * 100}%"></span></div>
       <button class="button primary" data-action="setup-next">${state.setupStep === steps.length - 1 ? "Начать сезон" : "Дальше"}</button>
     </div>
@@ -734,36 +795,40 @@ function finishSetup(useTemplate = false) {
 }
 
 function sidebar() {
-  const nav = [
-    ["dashboard", "Панель", icon.dashboard],
-    ["hero", "Герой", icon.hero],
-    ["quests", "Квесты", icon.quests],
-    ["boss", "Boss Fights", icon.boss],
-    ["achievements", "Ачивки", icon.achievements],
-    ["spheres", "Сферы жизни", icon.spheres],
-    ["stats", "Характеристики", icon.stats],
-    ["transform", "Трансформация", icon.transform],
-    ["rewards", "Награды", icon.rewards],
-    ["log", "Журнал", icon.log],
-    ["review", "Обзор", icon.review],
-    ["settings", "Настройки", icon.settings],
+  const primaryNav = [
+    ["dashboard", "Today", icon.dashboard],
+    ["hero", "Hero", icon.hero],
+    ["quests", "Quests", icon.quests],
+    ["review", "Progress", icon.review],
+    ["settings", "Settings", icon.settings],
   ];
+  const secondaryNav = [
+    ["boss", "Trials", icon.boss],
+    ["achievements", "Badges", icon.achievements],
+    ["transform", "Evolution", icon.transform],
+    ["rewards", "Rewards", icon.rewards],
+    ["spheres", "World", icon.spheres],
+    ["stats", "Stats", icon.stats],
+    ["log", "Ledger", icon.log],
+  ];
+  const navButton = ([route, label, glyph], compact = false) => `
+    <button class="nav-button ${compact ? "compact-nav" : ""} ${state.route === route ? "active" : ""}" data-route="${route}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}" ${state.route === route ? 'aria-current="page"' : ""} ${!state.onboardingComplete ? "disabled" : ""}>
+      <span class="nav-icon">${glyph}</span><span>${label}</span>
+    </button>
+  `;
   return `
     <aside class="sidebar">
       <div class="brand">
         <div class="brand-mark">LR</div>
         <div>
-          <h1 class="brand-title">Life RPG Builder <span>v${VERSION}</span></h1>
-          <p class="brand-subtitle">Personal RPG OS</p>
+          <h1 class="brand-title">${APP_NAME} <span>v${VERSION}</span></h1>
+          <p class="brand-subtitle">${APP_TAGLINE}</p>
         </div>
       </div>
       <nav class="nav">
-        ${nav.map(([route, label, glyph]) => `
-          <button class="nav-button ${state.route === route ? "active" : ""}" data-route="${route}" ${!state.onboardingComplete ? "disabled" : ""}>
-            <span class="nav-icon">${glyph}</span><span>${label}</span>
-          </button>
-        `).join("")}
+        ${primaryNav.map((item) => navButton(item)).join("")}
       </nav>
+      <div class="nav-rail">${secondaryNav.map((item) => navButton(item, true)).join("")}</div>
       <div class="sidebar-footer">
         <div class="season-label">Текущий сезон</div>
         <div class="season-name">${escapeHtml(state.hero.season)}</div>
@@ -779,14 +844,47 @@ function shell(title, subtitle, content, actions = "") {
       <main class="main">
         <header class="topbar">
           <div>
-            <div class="version-line">Life RPG Builder v${VERSION}</div>
+            <div class="version-line">${APP_TITLE} v${VERSION}</div>
             <h2 class="page-title">${title}</h2>
             <p class="page-subtitle">${subtitle}</p>
           </div>
           <div class="actions">${actions}</div>
         </header>
         ${content}
+        ${detailSheet()}
       </main>
+    </div>
+  `;
+}
+
+function detailSheet() {
+  if (!state.activeDetail) return "";
+  const isQuest = state.activeDetail.type === "quest";
+  const item = isQuest
+    ? state.quests.find((quest) => quest.id === state.activeDetail.id)
+    : state.bossFights.find((boss) => boss.id === state.activeDetail.id);
+  if (!item) return "";
+  const title = isQuest ? item.title : item.title;
+  const typeLabel = isQuest ? item.type : "Trial";
+  const copy = isQuest ? item.description : item.risk;
+  const reward = isQuest ? `+${item.xp} XP · +${item.coins} монет · ${item.stats?.join(" / ") || ""}` : `+${item.xp} XP · +${item.coins} монет · ${item.reward}`;
+  const action = isQuest
+    ? (item.status === "Активен" && !(item.type === "Ежедневный" && todayQuestIds().includes(item.id)) ? `<button class="button primary" data-complete="${item.id}">${icon.check} Complete</button>` : `<span class="tag accent">Completed</span>`)
+    : (item.status === "Побеждён" ? `<span class="tag accent">Cleared</span>` : `<button class="button primary" data-complete-boss="${item.id}">${icon.check} Clear trial</button>`);
+  return `
+    <div class="sheet-backdrop" data-action="close-detail">
+      <aside class="detail-sheet" role="dialog" aria-modal="true" aria-label="${escapeHtml(title)}" onclick="event.stopPropagation()">
+        <div class="panel-header">
+          <div><h3 class="panel-title">${escapeHtml(title)}</h3><p class="panel-note">${escapeHtml(typeLabel)} · ${escapeHtml(item.sphere || "World")}</p></div>
+          <button class="icon-button subtle" data-action="close-detail" aria-label="Close">${icon.x}</button>
+        </div>
+        <div class="panel-inner detail-body">
+          <p>${escapeHtml(copy || "No description yet.")}</p>
+          ${!isQuest && item.steps?.length ? `<ol class="trial-steps">${item.steps.map((step) => `<li>${escapeHtml(step)}</li>`).join("")}</ol>` : ""}
+          <div class="reward-line">${escapeHtml(reward)}</div>
+          <div class="actions">${action}<button class="button" data-route="${isQuest ? "quests" : "boss"}">Open screen</button></div>
+        </div>
+      </aside>
     </div>
   `;
 }
@@ -821,7 +919,7 @@ function evolutionName() {
 
 function dashboard() {
   return shell(
-    "Панель управления",
+    "Today",
     "Твой текущий сезон, активные квесты, сферы жизни и экономика наград.",
     `
       <div class="dashboard-grid">
@@ -830,8 +928,8 @@ function dashboard() {
           <section class="panel"><div class="panel-inner metric-row">
             <div class="metric"><strong>${todayXp()}</strong><span>XP сегодня</span></div>
             <div class="metric"><strong>${weeklyXp()}</strong><span>XP за 7 дней</span></div>
-            <div class="metric"><strong>${state.bossFights.filter((b) => b.status === "Активен").length}</strong><span>Boss fights</span></div>
-            <div class="metric"><strong>${state.unlockedAchievements.length}/${achievementCatalog.length}</strong><span>Ачивки</span></div>
+            <div class="metric"><strong>${state.bossFights.filter((b) => b.status === "Активен").length}</strong><span>Trials</span></div>
+            <div class="metric"><strong>${state.unlockedAchievements.length}/${achievementCatalog.length}</strong><span>Badges</span></div>
           </div></section>
           <section class="panel">
             <div class="panel-header">
@@ -843,13 +941,13 @@ function dashboard() {
         </div>
         <div class="grid">
           <section class="panel"><div class="panel-header"><h3 class="panel-title">Сферы жизни</h3><button class="link-button" data-route="spheres">Управлять</button></div><div class="panel-inner mini-grid">${state.spheres.slice(0, 6).map(sphereCard).join("") || empty("Сфер пока нет.")}</div></section>
-          <section class="panel"><div class="panel-header"><h3 class="panel-title">Boss fights</h3><button class="link-button" data-route="boss">Открыть</button></div><div class="panel-inner quest-list">${state.bossFights.slice(0, 2).map(bossCard).join("") || empty("Добавь boss fights в отдельном разделе.")}</div></section>
+          <section class="panel"><div class="panel-header"><h3 class="panel-title">Trials</h3><button class="link-button" data-route="boss">Открыть</button></div><div class="panel-inner quest-list">${state.bossFights.slice(0, 2).map(bossCard).join("") || emptyAction("Испытаний пока нет.", "Добавить шаблоны", "import-bosses")}</div></section>
           <section class="panel"><div class="panel-header"><h3 class="panel-title">Характеристики</h3><button class="link-button" data-route="stats">Настроить</button></div><div class="panel-inner mini-grid">${state.stats.slice(0, 6).map(statCard).join("") || empty("Характеристик пока нет.")}</div></section>
           <section class="panel"><div class="panel-header"><h3 class="panel-title">Награды</h3><span class="tag accent">${state.hero.coins} монет</span></div><div class="panel-inner reward-list">${state.rewards.slice(0, 3).map(rewardCard).join("") || empty("Создай личные награды.")}</div></section>
         </div>
       </div>
     `,
-    `<button class="button" data-action="import-template">Импорт шаблона</button><button class="button" data-route="log">Журнал</button><button class="button primary" data-route="transform">Трансформация</button>`,
+    `<button class="button" data-action="import-template">Starter pack</button><button class="button" data-route="log">Ledger</button><button class="button primary" data-route="transform">Evolution</button>`,
   );
 }
 
@@ -860,7 +958,7 @@ function activeQuests() {
 function questCard(quest) {
   const doneToday = quest.type === "Ежедневный" && todayQuestIds().includes(quest.id);
   return `
-    <article class="quest-card">
+    <article class="quest-card clickable-card" data-open-quest="${quest.id}" tabindex="0" role="button" aria-label="${escapeHtml(quest.title)}">
       <div>
         <h4>${escapeHtml(quest.title)}</h4>
         <p>${escapeHtml(quest.description)}</p>
@@ -882,7 +980,7 @@ function questCard(quest) {
 
 function bossCard(boss) {
   return `
-    <article class="quest-card boss-card">
+    <article class="quest-card boss-card clickable-card" data-open-boss="${boss.id}" tabindex="0" role="button" aria-label="${escapeHtml(boss.title)}">
       <div>
         <h4>${escapeHtml(boss.title)}</h4>
         <p>${escapeHtml(boss.steps?.join(" → ") || "High-risk quest")}</p>
@@ -894,7 +992,7 @@ function bossCard(boss) {
         <div class="reward-line">+${boss.xp} XP · +${boss.coins} монет${boss.rewardGroup ? ` · ${escapeHtml(boss.rewardGroup)}` : ""}</div>
       </div>
       <div class="card-actions">
-        ${boss.status === "Побеждён" ? `<span class="tag accent">Побеждён</span>` : `<button class="button primary" data-complete-boss="${boss.id}">Defeat</button>`}
+        ${boss.status === "Побеждён" ? `<span class="tag accent">Cleared</span>` : `<button class="button primary" data-complete-boss="${boss.id}">Clear</button>`}
       </div>
     </article>
   `;
@@ -996,9 +1094,9 @@ function questForm() {
     <form class="form-grid" data-form="quest">
       <label class="field full"><span class="label">Название</span><input class="input" name="title" required placeholder="Например: 90 минут deep work"></label>
       <label class="field full"><span class="label">Описание</span><textarea class="textarea" name="description" placeholder="Что именно нужно сделать?"></textarea></label>
-      <label class="field"><span class="label">Тип</span><select class="select" name="type">${["Ежедневный", "Еженедельный", "Главный", "Побочный", "Босс"].map((x) => option(x)).join("")}</select></label>
+      <label class="field"><span class="label">Тип</span><select class="select" name="type">${["Ежедневный", "Еженедельный", "Главный", "Побочный", "Босс"].map((x) => option(x, x === "Босс" ? "Trial" : x)).join("")}</select></label>
       <label class="field"><span class="label">Сфера</span><select class="select" name="sphere">${state.spheres.map((s) => option(s.name)).join("")}</select></label>
-      <label class="field"><span class="label">Сложность</span><select class="select" name="difficulty">${["Лёгкий", "Нормальный", "Сложный", "Босс"].map((x) => option(x)).join("")}</select></label>
+      <label class="field"><span class="label">Сложность</span><select class="select" name="difficulty">${["Лёгкий", "Нормальный", "Сложный", "Trial"].map((x) => option(x)).join("")}</select></label>
       <label class="field"><span class="label">Характеристика</span><select class="select" name="stat">${state.stats.map((s) => option(s.name)).join("")}</select></label>
       <label class="field"><span class="label">XP</span><input class="input" name="xp" type="number" min="1" value="50"></label>
       <label class="field"><span class="label">Монеты</span><input class="input" name="coins" type="number" min="0" value="20"></label>
@@ -1010,17 +1108,17 @@ function questForm() {
 
 function bossScreen() {
   return shell(
-    "Boss Fights",
+    "Trials",
     "Высокий риск, высокая награда: отдельные испытания, которые меняют идентичность героя.",
     `
       <div class="grid">
-        <section class="panel"><div class="panel-header"><h3 class="panel-title">Boss templates</h3><button class="button" data-action="import-bosses">Добавить шаблоны</button></div>
+        <section class="panel"><div class="panel-header"><h3 class="panel-title">Trial templates</h3><button class="button" data-action="import-bosses">Добавить шаблоны</button></div>
           <div class="panel-inner mini-grid">
             ${bossTemplates.map((boss) => `<article class="small-card"><strong>${escapeHtml(boss.title)}</strong><small>${escapeHtml(boss.risk)} · +${boss.xp} XP</small></article>`).join("")}
           </div>
         </section>
-        <section class="panel"><div class="panel-header"><h3 class="panel-title">Активные боссы</h3><span class="tag">${state.bossFights.length}</span></div>
-          <div class="panel-inner quest-list">${state.bossFights.map(bossCard).join("") || empty("Boss fights пока нет. Импортируй шаблоны или создай Босс-квест.")}</div>
+        <section class="panel"><div class="panel-header"><h3 class="panel-title">Активные испытания</h3><span class="tag">${state.bossFights.length}</span></div>
+          <div class="panel-inner quest-list">${state.bossFights.map(bossCard).join("") || emptyAction("Испытаний пока нет.", "Добавить шаблоны", "import-bosses")}</div>
         </section>
       </div>
     `,
@@ -1029,7 +1127,7 @@ function bossScreen() {
 
 function achievementsScreen() {
   return shell(
-    "Ачивки",
+    "Badges",
     "Значимые события героя: locked, ready и unlocked состояния.",
     `
       <section class="panel">
@@ -1044,8 +1142,8 @@ function logScreen() {
   const entries = state.progressLog.slice(0, 80);
   const types = [...new Set(state.progressLog.map((entry) => entry.type))];
   return shell(
-    "Журнал прогресса",
-    "Event ledger: квесты, боссы, награды, ачивки, импорт и экспорт.",
+    "Ledger",
+    "Event ledger: квесты, испытания, награды, badges, импорт и экспорт.",
     `
       <section class="panel">
         <div class="panel-header">
@@ -1053,7 +1151,7 @@ function logScreen() {
           <button class="button" data-action="export-progress">Export JSON</button>
         </div>
         <div class="panel-inner review-list">
-          ${entries.map((entry) => `<article class="review-item"><span>${new Date(entry.timestamp).toLocaleDateString()}</span><strong>${escapeHtml(entry.title)}</strong><small>${escapeHtml(entry.type)} · ${entry.xp >= 0 ? "+" : ""}${entry.xp} XP · ${entry.coins >= 0 ? "+" : ""}${entry.coins} монет · ${escapeHtml(entry.sphere || "")}</small></article>`).join("") || empty("Журнал пуст. Заверши квест или босса.")}
+          ${entries.map((entry) => `<article class="review-item"><span>${new Date(entry.timestamp).toLocaleDateString()}</span><strong>${escapeHtml(entry.title)}</strong><small>${escapeHtml(entry.type)} · ${entry.xp >= 0 ? "+" : ""}${entry.xp} XP · ${entry.coins >= 0 ? "+" : ""}${entry.coins} монет · ${escapeHtml(entry.sphere || "")}</small></article>`).join("") || empty("Журнал пуст. Заверши квест или trial.")}
         </div>
       </section>
     `,
@@ -1077,7 +1175,7 @@ function builderListScreen(kind) {
           </form>
         </div></section>
         <section class="panel"><div class="panel-header"><h3 class="panel-title">${title}</h3><span class="tag">${list.length}</span></div><div class="panel-inner mini-grid">
-          ${list.map((item) => `${isSphere ? sphereCard(item) : statCard(item)}<button class="button danger" data-delete-${isSphere ? "sphere" : "stat"}="${item.id}">Удалить ${escapeHtml(item.name)}</button>`).join("") || empty("Пока пусто.")}
+          ${list.map((item) => `<div class="builder-item">${isSphere ? sphereCard(item) : statCard(item)}<button class="button danger" data-delete-${isSphere ? "sphere" : "stat"}="${item.id}">Удалить ${escapeHtml(item.name)}</button></div>`).join("") || empty("Пока пусто. Добавь первый элемент через форму слева.")}
         </div></section>
       </div>
     `,
@@ -1127,8 +1225,8 @@ function reviewScreen() {
   const xp = state.completions.reduce((sum, item) => sum + item.xp, 0);
   const coins = state.completions.reduce((sum, item) => sum + item.coins, 0);
   return shell(
-    "Обзор",
-    "Сводка прогресса, завершённых действий и слабых зон.",
+    "Progress",
+    "Сводка прогресса, завершённых действий, badges и слабых зон.",
     `
       <div class="grid">
         <section class="panel"><div class="panel-inner metric-row">
@@ -1146,16 +1244,21 @@ function reviewScreen() {
 }
 
 function settingsScreen() {
+  const appearance = state.appearance || emptyState.appearance;
   return shell(
     "Настройки",
-    "Управление миром, шаблонами, импортом, экспортом и сбросом.",
+    "Appearance, data, starter packs and world reset.",
     `
       <div class="grid">
-        <section class="panel"><div class="panel-header"><h3 class="panel-title">Backup</h3></div><div class="panel-inner control-grid">
-          <div><h4>Export JSON</h4><p class="muted">Сохраняет героя, квесты, боссы, ачивки, награды и журнал прогресса.</p><button class="button primary" data-action="export-progress">Export backup</button></div>
-          <div><h4>Import JSON</h4><p class="muted">Восстанавливает сохранение и пересчитывает ачивки.</p><label class="button file-button">Import backup<input type="file" accept="application/json,.json" data-import-file></label></div>
+        <section class="panel"><div class="panel-header"><h3 class="panel-title">Appearance Studio</h3><span class="tag accent">${backgroundPresets[appearance.backgroundPreset]?.label || "Custom"}</span></div><div class="panel-inner control-grid">
+          <div><h4>World background</h4><p class="muted">Выбери встроенную сцену или загрузи свой фон.</p><div class="preset-row">${Object.entries(backgroundPresets).map(([key, preset]) => `<button class="theme-card ${appearance.backgroundPreset === key && !appearance.customBackground ? "active" : ""}" data-bg-preset="${key}"><strong>${preset.label}</strong></button>`).join("")}</div><label class="button file-button">Upload image<input type="file" accept="image/*" data-background-file></label></div>
+          <div><h4>Screen fit</h4><p class="muted">Dim регулирует читаемость на фоне. Density помогает уместить UI на MacBook.</p><label class="field"><span class="label">Background dim</span><input class="input" type="range" min="35" max="92" value="${appearance.backgroundDim}" data-background-dim></label><label class="field"><span class="label">Density</span><select class="select" data-density><option value="compact" ${appearance.density === "compact" ? "selected" : ""}>Compact</option><option value="comfortable" ${appearance.density === "comfortable" ? "selected" : ""}>Comfortable</option></select></label><button class="button" data-action="reset-appearance">Reset appearance</button></div>
         </div></section>
-        <section class="panel"><div class="panel-header"><h3 class="panel-title">Шаблоны</h3></div><div class="panel-inner actions"><button class="button" data-action="import-template">Импортировать стартовый шаблон</button><button class="button" data-action="import-bosses">Добавить boss fights</button></div></section>
+        <section class="panel"><div class="panel-header"><h3 class="panel-title">Backup</h3></div><div class="panel-inner control-grid">
+          <div><h4>Export JSON</h4><p class="muted">Сохраняет героя, квесты, trials, badges, награды и журнал прогресса.</p><button class="button primary" data-action="export-progress">Export backup</button></div>
+          <div><h4>Import JSON</h4><p class="muted">Восстанавливает сохранение и пересчитывает badges.</p><label class="button file-button">Import backup<input type="file" accept="application/json,.json" data-import-file></label></div>
+        </div></section>
+        <section class="panel"><div class="panel-header"><h3 class="panel-title">Starter packs</h3></div><div class="panel-inner actions"><button class="button" data-action="import-template">Импортировать стартовый шаблон</button><button class="button" data-action="import-bosses">Добавить trials</button></div></section>
         <section class="panel"><div class="panel-header"><h3 class="panel-title">Опасная зона</h3></div><div class="panel-inner"><button class="button danger" data-action="hard-reset">Удалить мир и начать с нуля</button></div></section>
       </div>
     `,
@@ -1168,6 +1271,10 @@ function weakestSphere() {
 
 function empty(text) {
   return `<div class="empty">${text}</div>`;
+}
+
+function emptyAction(text, label, action) {
+  return `<div class="empty empty-action"><span>${text}</span><button class="button" data-action="${action}">${label}</button></div>`;
 }
 
 function option(value, label = value, selected = false) {
@@ -1198,6 +1305,13 @@ function render() {
 }
 
 document.addEventListener("click", (event) => {
+  const submitButton = event.target.closest('button[type="submit"]');
+  if (submitButton?.form?.dataset.form) {
+    event.preventDefault();
+    handleFormSubmit(submitButton.form);
+    return;
+  }
+
   const route = event.target.closest("[data-route]")?.dataset.route;
   if (route && state.onboardingComplete) setRoute(route);
 
@@ -1233,6 +1347,9 @@ document.addEventListener("click", (event) => {
     saveState();
     render();
   }
+
+  const backgroundPreset = event.target.closest("[data-bg-preset]")?.dataset.bgPreset;
+  if (backgroundPreset) setBackgroundPreset(backgroundPreset);
 
   const sphere = event.target.closest("[data-toggle-sphere]")?.dataset.toggleSphere;
   if (sphere) {
@@ -1284,8 +1401,28 @@ document.addEventListener("click", (event) => {
     saveState();
     render();
   }
+  if (action === "reset-appearance") resetAppearance();
+  if (action === "close-detail") {
+    state.activeDetail = null;
+    saveState();
+    render();
+  }
   if (action === "transform") transformHero();
   if (action === "hard-reset") hardReset();
+
+  const questDetail = event.target.closest("[data-open-quest]")?.dataset.openQuest;
+  if (questDetail && !event.target.closest("button, input, select, textarea, label, a")) {
+    state.activeDetail = { type: "quest", id: questDetail };
+    saveState();
+    render();
+  }
+
+  const bossDetail = event.target.closest("[data-open-boss]")?.dataset.openBoss;
+  if (bossDetail && !event.target.closest("button, input, select, textarea, label, a")) {
+    state.activeDetail = { type: "boss", id: bossDetail };
+    saveState();
+    render();
+  }
 
   const complete = event.target.closest("[data-complete]")?.dataset.complete;
   if (complete) completeQuest(complete);
@@ -1312,7 +1449,7 @@ document.addEventListener("click", (event) => {
       state.bossFights.some((boss) => boss.sphere === sphere.name)
     );
     if (isReferenced) {
-      toast("Сфера используется в квестах или boss fights.");
+      toast("Сфера используется в квестах или trials.");
       return;
     }
     if (!confirm("Удалить эту сферу?")) return;
@@ -1338,14 +1475,68 @@ document.addEventListener("click", (event) => {
 
 document.addEventListener("change", (event) => {
   const input = event.target.closest("[data-import-file]");
-  if (!input?.files?.[0]) return;
-  importProgressFile(input.files[0]);
-  input.value = "";
+  if (input?.files?.[0]) {
+    importProgressFile(input.files[0]);
+    input.value = "";
+    return;
+  }
+  const backgroundInput = event.target.closest("[data-background-file]");
+  if (backgroundInput?.files?.[0]) {
+    importBackgroundFile(backgroundInput.files[0]);
+    backgroundInput.value = "";
+    return;
+  }
+  const dim = event.target.closest("[data-background-dim]");
+  if (dim) {
+    state.appearance.backgroundDim = Number(dim.value);
+    applyTheme();
+    saveState();
+    return;
+  }
+  const density = event.target.closest("[data-density]");
+  if (density) {
+    state.appearance.density = density.value;
+    applyTheme();
+    saveState();
+    render();
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && state.activeDetail) {
+    state.activeDetail = null;
+    saveState();
+    render();
+    return;
+  }
+  if (!["Enter", " "].includes(event.key)) return;
+  const quest = document.activeElement?.closest?.("[data-open-quest]");
+  const boss = document.activeElement?.closest?.("[data-open-boss]");
+  if (quest) {
+    event.preventDefault();
+    state.activeDetail = { type: "quest", id: quest.dataset.openQuest };
+    saveState();
+    render();
+  }
+  if (boss) {
+    event.preventDefault();
+    state.activeDetail = { type: "boss", id: boss.dataset.openBoss };
+    saveState();
+    render();
+  }
 });
 
 document.addEventListener("submit", (event) => {
   event.preventDefault();
-  const form = event.target;
+  handleFormSubmit(event.target);
+});
+
+function handleFormSubmit(form) {
+  if (!(form instanceof HTMLFormElement)) return;
+  if (!form.checkValidity()) {
+    form.reportValidity();
+    return;
+  }
   const data = new FormData(form);
   if (form.matches('[data-form="quick-sphere"], [data-form="sphere"]')) {
     createSphere(data.get("name"));
@@ -1357,7 +1548,7 @@ document.addEventListener("submit", (event) => {
   }
   if (form.matches('[data-form="quest"]')) {
     createQuest(data);
-    toast(data.get("type") === "Босс" ? "Boss fight создан." : "Квест создан.");
+    toast(data.get("type") === "Босс" ? "Trial создан." : "Квест создан.");
   }
   if (form.matches('[data-form="reward"]')) {
     createReward(data);
@@ -1375,6 +1566,6 @@ document.addEventListener("submit", (event) => {
   form.reset();
   saveState();
   render();
-});
+}
 
 render();
