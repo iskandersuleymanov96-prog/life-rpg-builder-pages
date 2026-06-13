@@ -79,6 +79,7 @@ svg {
   display: grid;
   grid-template-columns: 272px minmax(0, 1fr);
   min-height: 100vh;
+  min-width: 0;
 }
 
 .setup-layout {
@@ -89,6 +90,7 @@ svg {
   position: sticky;
   top: 0;
   height: 100vh;
+  min-width: 0;
   padding: 22px 16px;
   border-right: 1px solid var(--line);
   background: rgba(5, 8, 13, 0.84);
@@ -149,6 +151,7 @@ svg {
 .nav {
   display: grid;
   gap: 7px;
+  min-width: 0;
 }
 
 .nav-button {
@@ -237,6 +240,18 @@ svg {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.file-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.file-button input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
 }
 
 .button,
@@ -388,6 +403,18 @@ svg {
   font-weight: 800;
 }
 
+.hero-avatar-art {
+  background-image:
+    linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(5, 7, 11, 0.22)),
+    url("./assets/hero-lineup.png");
+  background-repeat: no-repeat;
+  background-size: 560% auto;
+}
+
+.hero-avatar-art span {
+  opacity: 0;
+}
+
 .hero-copy h3 {
   margin: 0;
   font-size: 24px;
@@ -462,6 +489,7 @@ svg {
 .small-card,
 .quest-card,
 .reward-card,
+.boss-card,
 .achievement-card,
 .review-item {
   border: 1px solid var(--line);
@@ -480,6 +508,8 @@ svg {
 
 .quest-list,
 .reward-list,
+.boss-list,
+.achievement-grid,
 .review-list,
 .evolution-list {
   display: grid;
@@ -512,6 +542,94 @@ svg {
   color: var(--accent-2);
   font-size: 12px;
   font-weight: 800;
+}
+
+.boss-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.boss-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.boss-head h4 {
+  margin: 8px 0 0;
+  font-size: 17px;
+}
+
+.boss-steps {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.boss-steps li {
+  display: flex;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.boss-steps li::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  margin-top: 5px;
+  flex: 0 0 7px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.boss-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.achievement-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.achievement-card {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 12px;
+  padding: 14px;
+}
+
+.achievement-medal {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 36%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  color: var(--accent-2);
+}
+
+.achievement-card.locked {
+  opacity: 0.55;
+}
+
+.achievement-card h4 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.achievement-card p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .card-actions {
@@ -575,6 +693,26 @@ svg {
   font-size: 11px;
   font-weight: 800;
   text-transform: uppercase;
+}
+
+.control-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.control-grid > div {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.control-grid h4 {
+  margin: 0;
 }
 
 .form-grid {
@@ -695,6 +833,45 @@ svg {
   line-height: 1.4;
 }
 
+.visual-picker {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.visual-card {
+  display: grid;
+  min-height: 118px;
+  gap: 9px;
+  justify-items: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text);
+  padding: 10px;
+  cursor: pointer;
+}
+
+.visual-card.active {
+  border-color: color-mix(in srgb, var(--accent) 52%, transparent);
+  background: color-mix(in srgb, var(--accent) 13%, rgba(255, 255, 255, 0.04));
+}
+
+.visual-thumb {
+  width: 78px;
+  height: 78px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 9px;
+  background-image: url("./assets/hero-lineup.png");
+  background-repeat: no-repeat;
+  background-size: 560% auto;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.28);
+}
+
+.visual-card strong {
+  font-size: 12px;
+}
+
 .stepper {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -787,6 +964,12 @@ svg {
   font-size: 20px;
   font-weight: 800;
   text-align: center;
+  background-image:
+    linear-gradient(180deg, rgba(5, 7, 11, 0), rgba(5, 7, 11, 0.28)),
+    url("./assets/hero-lineup.png");
+  background-position: center 42%;
+  background-repeat: no-repeat;
+  background-size: 520% auto;
 }
 
 .forge-rings {
@@ -934,19 +1117,44 @@ svg {
     width: 100%;
   }
 
-  .nav,
   .mini-grid,
   .metric-row,
   .form-grid,
   .theme-grid,
   .choice-grid,
   .choice-grid.compact,
+  .visual-picker,
+  .achievement-grid,
+  .control-grid,
   .stepper,
   .setup-footer,
   .review-item,
   .quest-card,
-  .reward-card {
+  .reward-card,
+  .boss-footer {
     grid-template-columns: 1fr;
+  }
+
+  .nav {
+    display: flex;
+    gap: 8px;
+    max-width: 100%;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .nav-button {
+    min-width: 52px;
+    justify-content: center;
+    padding: 0 11px;
+  }
+
+  .nav-button span:not(.nav-icon) {
+    display: none;
+  }
+
+  .sidebar-footer {
+    display: none;
   }
 
   .page-title {

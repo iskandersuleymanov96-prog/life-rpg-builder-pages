@@ -1,5 +1,6 @@
-const VERSION = "0.2.0";
+const VERSION = "0.3.0";
 const STORAGE_KEY = "life-rpg-builder-state-v2";
+const DAILY_XP_CAP = 200;
 
 const icon = {
   dashboard: `<svg viewBox="0 0 24 24"><path d="M4 13h6V4H4v9Zm10 7h6V4h-6v16ZM4 20h6v-4H4v4Z"/></svg>`,
@@ -9,6 +10,9 @@ const icon = {
   stats: `<svg viewBox="0 0 24 24"><path d="M5 19V9M12 19V5M19 19v-7M3 19h18"/></svg>`,
   transform: `<svg viewBox="0 0 24 24"><path d="M12 3l3 6 6 3-6 3-3 6-3-6-6-3 6-3 3-6Z"/><path d="M19 4v4M21 6h-4"/></svg>`,
   rewards: `<svg viewBox="0 0 24 24"><path d="M5 11h14v10H5V11ZM4 7h16v4H4V7Z"/><path d="M12 7v14M12 7c-2.7 0-4.5-3-2-4 1.7-.7 2.7 1.2 2 4Zm0 0c2.7 0 4.5-3 2-4-1.7-.7-2.7 1.2-2 4Z"/></svg>`,
+  boss: `<svg viewBox="0 0 24 24"><path d="M12 3 4 7v6c0 4.5 3.2 7.3 8 8 4.8-.7 8-3.5 8-8V7l-8-4Z"/><path d="M9 10h.01M15 10h.01M9 15c2 1.4 4 1.4 6 0"/></svg>`,
+  achievements: `<svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4Z"/><path d="M7 6H4v2a4 4 0 0 0 4 4M17 6h3v2a4 4 0 0 1-4 4"/></svg>`,
+  log: `<svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>`,
   review: `<svg viewBox="0 0 24 24"><path d="M5 4h14v16H5V4Z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>`,
   settings: `<svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2 3.5-.2-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5v.4h-4v-.4a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.2.1-2-3.5.1-.1A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.5-1H3v-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9L4.2 7l2-3.5.2.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V2h4v.4a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.2-.1 2 3.5-.1.1A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.5 1h.1v4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>`,
   plus: `<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>`,
@@ -35,6 +39,32 @@ const archetypes = [
 
 const spherePresets = ["Тело", "Разум", "Деньги", "Карьера", "Творчество", "Отношения", "Стиль жизни", "Дисциплина"];
 const statPresets = ["Сила", "Фокус", "Дисциплина", "Креативность", "Харизма", "Мудрость", "Капитал", "Мастерство"];
+
+const heroVisuals = [
+  { id: "founder", label: "Founder Architect", position: "8% 50%" },
+  { id: "creator", label: "Creator Artist", position: "30% 50%" },
+  { id: "warrior", label: "Warrior Athlete", position: "50% 50%" },
+  { id: "scholar", label: "Scholar Strategist", position: "72% 50%" },
+  { id: "explorer", label: "Explorer Visionary", position: "94% 50%" },
+];
+
+const bossTemplates = [
+  { id: "boss-public-launch", title: "Public Launch", sphere: "Карьера", risk: "Публичная оценка", reward: "Новая видимость", xp: 900, coins: 260, rewardGroup: "public-launch", steps: ["Опубликовать артефакт", "Собрать реакцию", "Сделать вывод"] },
+  { id: "boss-first-client", title: "First Paid Client", sphere: "Деньги", risk: "Отказ и цена", reward: "Деньги начали двигаться", xp: 1400, coins: 420, rewardGroup: "first-client", steps: ["Сформулировать оффер", "Сделать 5 касаний", "Закрыть оплату"] },
+  { id: "boss-identity-repack", title: "Identity Repack", sphere: "Творчество", risk: "Старая идентичность рушится", reward: "Новый визуальный авторитет", xp: 1100, coins: 320, rewardGroup: "identity-repack", steps: ["Обновить профиль", "Собрать кейс", "Опубликовать позиционирование"] },
+  { id: "boss-new-circle", title: "New Circle", sphere: "Отношения", risk: "Войти в комнату выше уровнем", reward: "Социальный капитал", xp: 850, coins: 240, rewardGroup: "new-circle", steps: ["Найти событие", "Пойти вживую", "Закрепить контакт"] },
+  { id: "boss-revenue-standard", title: "$1000 Month", sphere: "Деньги", risk: "Новый стандарт дохода", reward: "Revenue identity", xp: 2500, coins: 700, rewardGroup: "first-1000", steps: ["План продаж", "Еженедельные касания", "Получить оплату"] },
+];
+
+const achievementCatalog = [
+  { id: "first-quest", title: "Первый квест", category: "Старт", rarity: "common", condition: "Заверши любой квест.", test: (s) => s.progressLog.some((e) => e.type === "quest") },
+  { id: "first-boss", title: "Первый босс повержен", category: "Boss", rarity: "rare", condition: "Победи любого босса.", test: (s) => s.progressLog.some((e) => e.type === "boss") },
+  { id: "backup-master", title: "Хранитель сохранения", category: "Система", rarity: "common", condition: "Сделай экспорт прогресса.", test: (s) => s.progressLog.some((e) => e.type === "export") },
+  { id: "money-moving", title: "Money Is Moving", category: "Деньги", rarity: "rare", condition: "Набери 500 монет.", test: (s) => s.hero.coins >= 500 },
+  { id: "creator-mode", title: "Creative Director Mode", category: "Творчество", rarity: "epic", condition: "Набери 500 XP в творчестве.", test: (s) => (byName(s.spheres, "Творчество")?.xp || 0) >= 500 },
+  { id: "apprentice", title: "Трансформация: Подмастерье", category: "Герой", rarity: "rare", condition: "Достигни уровня 5.", test: (s) => s.hero.level >= 5 },
+  { id: "warrior-form", title: "Трансформация: Воин", category: "Герой", rarity: "epic", condition: "Достигни уровня 10.", test: (s) => s.hero.level >= 10 },
+];
 
 const starterTemplates = {
   founder: {
@@ -80,13 +110,19 @@ const emptyState = {
     mission: "",
     motto: "",
     evolution: 0,
+    visual: "creator",
   },
   spheres: [],
   stats: [],
   quests: [],
+  bossFights: [],
   rewards: [],
   achievements: [],
+  unlockedAchievements: [],
   completions: [],
+  progressLog: [],
+  completedDailyByDate: {},
+  rewardGroupsPaid: {},
   drafts: {
     sphereInput: "",
     statInput: "",
@@ -100,14 +136,57 @@ function loadState() {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (!stored) return structuredClone(emptyState);
   try {
-    return { ...structuredClone(emptyState), ...JSON.parse(stored), version: VERSION };
+    return sanitizeState(JSON.parse(stored));
   } catch {
     return structuredClone(emptyState);
   }
 }
 
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    toast("Не удалось сохранить прогресс. Сделай экспорт JSON.");
+  }
+}
+
+function sanitizeState(raw) {
+  const base = structuredClone(emptyState);
+  const next = { ...base, ...(raw || {}), version: VERSION };
+  next.hero = { ...base.hero, ...(raw?.hero || {}) };
+  next.spheres = Array.isArray(raw?.spheres) ? raw.spheres : [];
+  next.stats = Array.isArray(raw?.stats) ? raw.stats : [];
+  next.quests = Array.isArray(raw?.quests) ? raw.quests : [];
+  next.bossFights = Array.isArray(raw?.bossFights) ? raw.bossFights : [];
+  next.rewards = Array.isArray(raw?.rewards) ? raw.rewards : [];
+  next.achievements = Array.isArray(raw?.achievements) ? raw.achievements : [];
+  next.unlockedAchievements = Array.isArray(raw?.unlockedAchievements) ? raw.unlockedAchievements : [];
+  next.completions = Array.isArray(raw?.completions) ? raw.completions : [];
+  next.progressLog = Array.isArray(raw?.progressLog) ? raw.progressLog : next.completions.map((item) => ({ ...item, type: "quest", timestamp: item.date || new Date().toISOString() }));
+  next.completedDailyByDate = raw?.completedDailyByDate && typeof raw.completedDailyByDate === "object" ? raw.completedDailyByDate : {};
+  next.rewardGroupsPaid = raw?.rewardGroupsPaid && typeof raw.rewardGroupsPaid === "object" ? raw.rewardGroupsPaid : {};
+  return finalizeState(next, false);
+}
+
+function finalizeState(next = state, showUnlocks = true) {
+  achievementCatalog.forEach((achievement) => {
+    if (next.unlockedAchievements.includes(achievement.id)) return;
+    if (!achievement.test(next)) return;
+    next.unlockedAchievements.push(achievement.id);
+    next.achievements.push(achievement.title);
+    next.progressLog.unshift({
+      id: uid(),
+      timestamp: new Date().toISOString(),
+      title: achievement.title,
+      type: "achievement",
+      xp: 0,
+      coins: 0,
+      sphere: achievement.category,
+      comment: achievement.condition,
+    });
+    if (showUnlocks) toast(`Ачивка открыта: ${achievement.title}`);
+  });
+  return next;
 }
 
 function applyTheme() {
@@ -135,6 +214,44 @@ function maybeLevel(entity) {
 
 function uid() {
   return crypto.randomUUID();
+}
+
+function dateKey(date = new Date()) {
+  return date.toISOString().slice(0, 10);
+}
+
+function todayQuestIds() {
+  return state.completedDailyByDate[dateKey()] || [];
+}
+
+function todayXp() {
+  const today = dateKey();
+  return state.progressLog
+    .filter((entry) => entry.timestamp?.slice(0, 10) === today && entry.type === "quest")
+    .reduce((sum, entry) => sum + Number(entry.xp || 0), 0);
+}
+
+function weeklyXp() {
+  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  return state.progressLog
+    .filter((entry) => new Date(entry.timestamp).getTime() >= cutoff)
+    .reduce((sum, entry) => sum + Number(entry.xp || 0), 0);
+}
+
+function logProgress(entry) {
+  state.progressLog.unshift({
+    id: uid(),
+    timestamp: new Date().toISOString(),
+    title: entry.title,
+    type: entry.type || "quest",
+    xp: Number(entry.xp || 0),
+    coins: Number(entry.coins || 0),
+    sphere: entry.sphere || "",
+    stats: entry.stats || [],
+    comment: entry.comment || "",
+    actionId: entry.actionId || "",
+    rewardGroup: entry.rewardGroup || "",
+  });
 }
 
 function escapeHtml(value) {
@@ -183,6 +300,25 @@ function createStat(name) {
 function createQuest(data) {
   const title = data.get("title")?.trim();
   if (!title) return;
+  if ((data.get("type") || "") === "Босс") {
+    state.bossFights.unshift({
+      id: uid(),
+      title,
+      sphere: data.get("sphere") || state.spheres[0]?.name || "Без сферы",
+      risk: data.get("description")?.trim() || "Крупный личный барьер, который требует серии реальных действий.",
+      reward: "Unlock next identity layer",
+      rewardGroup: title.toLowerCase().replace(/[^a-zа-я0-9]+/gi, "-").replace(/^-|-$/g, "") || uid(),
+      xp: Number(data.get("xp") || 220),
+      coins: Number(data.get("coins") || 120),
+      steps: [
+        "Сформулировать критерий победы",
+        "Сделать первый видимый шаг",
+        "Закрыть финальное действие",
+      ],
+      status: "Активен",
+    });
+    return;
+  }
   state.quests.unshift({
     id: uid(),
     title,
@@ -225,36 +361,111 @@ function importTemplate(archetype = state.hero.archetype || "founder") {
       { id: uid(), title: "Покупка для образа", cost: 1000, category: "Стиль", status: "Активна" },
     );
   }
+  importBossTemplates(false);
   toast("Стартовый шаблон импортирован.");
+}
+
+function importBossTemplates(showMessage = true) {
+  bossTemplates.forEach((boss) => {
+    if (state.bossFights.some((item) => item.id === boss.id || item.title === boss.title)) return;
+    state.bossFights.push({ ...boss, status: "Активен", completedSteps: [] });
+    if (!byName(state.spheres, boss.sphere)) createSphere(boss.sphere);
+  });
+  if (showMessage) toast("Boss fights добавлены.");
 }
 
 function completeQuest(id) {
   const quest = state.quests.find((item) => item.id === id);
   if (!quest || quest.status === "Завершён") return;
+  const isDaily = quest.type === "Ежедневный";
+  const todayIds = todayQuestIds();
+  if (isDaily && todayIds.includes(quest.id)) {
+    toast("Этот daily quest уже закрыт сегодня.");
+    return;
+  }
 
-  quest.status = "Завершён";
-  state.hero.xp += quest.xp;
+  const remainingDailyXp = Math.max(0, DAILY_XP_CAP - todayXp());
+  const awardedXp = isDaily ? Math.min(quest.xp, remainingDailyXp) : quest.xp;
+  if (isDaily && awardedXp <= 0) {
+    toast(`Daily XP cap ${DAILY_XP_CAP} уже достигнут.`);
+    return;
+  }
+
+  if (isDaily) {
+    state.completedDailyByDate[dateKey()] = [...todayIds, quest.id];
+  } else if (quest.type !== "Еженедельный") {
+    quest.status = "Завершён";
+  }
+
+  state.hero.xp += awardedXp;
   state.hero.coins += quest.coins;
   maybeLevel(state.hero);
 
   const sphere = byName(state.spheres, quest.sphere);
   if (sphere) {
-    sphere.xp += quest.xp;
+    sphere.xp += awardedXp;
     maybeLevel(sphere);
   }
 
   quest.stats.forEach((name) => {
     const stat = byName(state.stats, name);
     if (stat) {
-      stat.xp += Math.round(quest.xp / quest.stats.length);
+      stat.xp += Math.round(awardedXp / quest.stats.length);
       maybeLevel(stat);
     }
   });
 
-  state.completions.unshift({ id: uid(), title: quest.title, xp: quest.xp, coins: quest.coins, date: new Date().toISOString() });
-  if (!state.achievements.includes("Первый квест завершён")) state.achievements.push("Первый квест завершён");
+  const completion = { id: uid(), title: quest.title, xp: awardedXp, coins: quest.coins, date: new Date().toISOString() };
+  state.completions.unshift(completion);
+  logProgress({
+    title: quest.title,
+    type: "quest",
+    xp: awardedXp,
+    coins: quest.coins,
+    sphere: quest.sphere,
+    stats: quest.stats,
+    comment: awardedXp < quest.xp ? "Daily XP cap applied." : quest.description,
+    actionId: quest.id,
+  });
+  finalizeState(state);
   saveState();
-  toast(`Квест завершён: +${quest.xp} XP, +${quest.coins} монет`);
+  toast(`Квест завершён: +${awardedXp} XP, +${quest.coins} монет`);
+  render();
+}
+
+function completeBoss(id) {
+  const boss = state.bossFights.find((item) => item.id === id);
+  if (!boss || boss.status === "Побеждён") return;
+  let awardedXp = boss.xp;
+  if (boss.rewardGroup && state.rewardGroupsPaid[boss.rewardGroup]) {
+    awardedXp = Math.max(0, boss.xp - state.rewardGroupsPaid[boss.rewardGroup]);
+  }
+  if (boss.rewardGroup) {
+    state.rewardGroupsPaid[boss.rewardGroup] = Math.max(state.rewardGroupsPaid[boss.rewardGroup] || 0, boss.xp);
+  }
+  boss.status = "Побеждён";
+  boss.completedSteps = [...(boss.steps || [])];
+  state.hero.xp += awardedXp;
+  state.hero.coins += boss.coins;
+  maybeLevel(state.hero);
+  const sphere = byName(state.spheres, boss.sphere);
+  if (sphere) {
+    sphere.xp += awardedXp;
+    maybeLevel(sphere);
+  }
+  logProgress({
+    title: boss.title,
+    type: "boss",
+    xp: awardedXp,
+    coins: boss.coins,
+    sphere: boss.sphere,
+    comment: `Risk: ${boss.risk}. Reward: ${boss.reward}.`,
+    actionId: boss.id,
+    rewardGroup: boss.rewardGroup,
+  });
+  finalizeState(state);
+  saveState();
+  toast(`Boss defeated: +${awardedXp} XP`);
   render();
 }
 
@@ -266,7 +477,9 @@ function redeemReward(id) {
     return;
   }
   state.hero.coins -= reward.cost;
-  reward.status = "Получена";
+  reward.redemptions = Number(reward.redemptions || 0) + 1;
+  logProgress({ title: reward.title, type: "reward", xp: 0, coins: -reward.cost, sphere: reward.category, comment: "Reward redeemed", actionId: reward.id });
+  finalizeState(state, false);
   saveState();
   toast(`Награда получена: ${reward.title}`);
   render();
@@ -295,6 +508,51 @@ function hardReset() {
   render();
 }
 
+function exportProgress() {
+  const payload = {
+    app: "Life RPG Builder",
+    version: VERSION,
+    schemaVersion: 3,
+    exportedAt: new Date().toISOString(),
+    state: finalizeState(structuredClone(state), false),
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `life-rpg-builder-progress-${dateKey()}.json`;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+  logProgress({ title: "Export JSON backup", type: "export", xp: 0, coins: 0, comment: "Manual backup created" });
+  finalizeState(state);
+  saveState();
+  toast("JSON backup экспортирован.");
+}
+
+function importProgressFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(String(reader.result));
+      const imported = parsed.state || parsed;
+      state = sanitizeState(imported);
+      state.onboardingComplete = true;
+      state.route = "dashboard";
+      logProgress({ title: "Import JSON backup", type: "import", xp: 0, coins: 0, comment: file.name });
+      finalizeState(state, false);
+      saveState();
+      toast("Прогресс импортирован.");
+      render();
+    } catch {
+      toast("Не удалось импортировать JSON.");
+    }
+  };
+  reader.readAsText(file);
+}
+
 function setupShell(content) {
   return `
     <div class="layout setup-layout">
@@ -306,7 +564,7 @@ function setupShell(content) {
             <h2 class="page-title">Создай героя</h2>
             <p class="page-subtitle">Первый запуск: собери свою систему с нуля или импортируй шаблон.</p>
           </div>
-          <button class="button ghost" data-action="import-and-finish">Пропустить создание</button>
+          <button class="button ghost" data-action="empty-and-finish">Старт без шаблона</button>
         </header>
         ${content}
       </main>
@@ -369,6 +627,14 @@ function setupStepContent() {
             <button type="button" class="theme-card ${state.theme === key ? "active" : ""}" data-theme-choice="${key}">
               <span class="theme-gem" style="background:${theme.accent}"></span>
               <strong>${theme.label}</strong>
+            </button>
+          `).join("")}
+        </div>
+        <div class="visual-picker full">
+          ${heroVisuals.map((visual) => `
+            <button type="button" class="visual-card ${state.hero.visual === visual.id ? "active" : ""}" data-hero-visual="${visual.id}">
+              <span class="visual-thumb" style="background-position:${visual.position}"></span>
+              <strong>${visual.label}</strong>
             </button>
           `).join("")}
         </div>
@@ -460,10 +726,7 @@ function finishSetup(useTemplate = false) {
   if (!state.hero.archetype) state.hero.archetype = "custom";
   if (!state.spheres.length) ["Тело", "Разум", "Дисциплина"].forEach((item) => createSphere(item));
   if (!state.stats.length) ["Фокус", "Дисциплина", "Мастерство"].forEach((item) => createStat(item));
-  if (useTemplate || !state.quests.length) importTemplate(state.hero.archetype);
-  if (!state.rewards.length) {
-    state.rewards.push({ id: uid(), title: "Личная награда", cost: 100, category: "Custom", status: "Активна" });
-  }
+  if (useTemplate) importTemplate(state.hero.archetype);
   state.onboardingComplete = true;
   state.route = "dashboard";
   saveState();
@@ -475,10 +738,13 @@ function sidebar() {
     ["dashboard", "Панель", icon.dashboard],
     ["hero", "Герой", icon.hero],
     ["quests", "Квесты", icon.quests],
+    ["boss", "Boss Fights", icon.boss],
+    ["achievements", "Ачивки", icon.achievements],
     ["spheres", "Сферы жизни", icon.spheres],
     ["stats", "Характеристики", icon.stats],
     ["transform", "Трансформация", icon.transform],
     ["rewards", "Награды", icon.rewards],
+    ["log", "Журнал", icon.log],
     ["review", "Обзор", icon.review],
     ["settings", "Настройки", icon.settings],
   ];
@@ -528,9 +794,10 @@ function shell(title, subtitle, content, actions = "") {
 function heroCard() {
   const next = xpForNext(state.hero.level);
   const archetype = archetypes.find((item) => item.id === state.hero.archetype)?.label || "Свой класс";
+  const visual = heroVisuals.find((item) => item.id === state.hero.visual) || heroVisuals[0];
   return `
     <section class="panel hero-card">
-      <div class="avatar-orbit"><div class="avatar">${escapeHtml((state.hero.codename || state.hero.name || "?").slice(0, 2).toUpperCase())}</div></div>
+      <div class="avatar-orbit"><div class="avatar hero-avatar-art" style="background-position:${visual.position}"><span>${escapeHtml((state.hero.codename || state.hero.name || "?").slice(0, 2).toUpperCase())}</span></div></div>
       <div class="hero-copy">
         <h3>${escapeHtml(state.hero.name || "Безымянный герой")}</h3>
         <div class="meta-row">
@@ -560,6 +827,12 @@ function dashboard() {
       <div class="dashboard-grid">
         <div class="grid">
           ${heroCard()}
+          <section class="panel"><div class="panel-inner metric-row">
+            <div class="metric"><strong>${todayXp()}</strong><span>XP сегодня</span></div>
+            <div class="metric"><strong>${weeklyXp()}</strong><span>XP за 7 дней</span></div>
+            <div class="metric"><strong>${state.bossFights.filter((b) => b.status === "Активен").length}</strong><span>Boss fights</span></div>
+            <div class="metric"><strong>${state.unlockedAchievements.length}/${achievementCatalog.length}</strong><span>Ачивки</span></div>
+          </div></section>
           <section class="panel">
             <div class="panel-header">
               <div><h3 class="panel-title">Активные квесты</h3><p class="panel-note">Каждое действие меняет героя и систему.</p></div>
@@ -570,12 +843,13 @@ function dashboard() {
         </div>
         <div class="grid">
           <section class="panel"><div class="panel-header"><h3 class="panel-title">Сферы жизни</h3><button class="link-button" data-route="spheres">Управлять</button></div><div class="panel-inner mini-grid">${state.spheres.slice(0, 6).map(sphereCard).join("") || empty("Сфер пока нет.")}</div></section>
+          <section class="panel"><div class="panel-header"><h3 class="panel-title">Boss fights</h3><button class="link-button" data-route="boss">Открыть</button></div><div class="panel-inner quest-list">${state.bossFights.slice(0, 2).map(bossCard).join("") || empty("Добавь boss fights в отдельном разделе.")}</div></section>
           <section class="panel"><div class="panel-header"><h3 class="panel-title">Характеристики</h3><button class="link-button" data-route="stats">Настроить</button></div><div class="panel-inner mini-grid">${state.stats.slice(0, 6).map(statCard).join("") || empty("Характеристик пока нет.")}</div></section>
           <section class="panel"><div class="panel-header"><h3 class="panel-title">Награды</h3><span class="tag accent">${state.hero.coins} монет</span></div><div class="panel-inner reward-list">${state.rewards.slice(0, 3).map(rewardCard).join("") || empty("Создай личные награды.")}</div></section>
         </div>
       </div>
     `,
-    `<button class="button" data-action="import-template">Импорт шаблона</button><button class="button primary" data-route="transform">Трансформация</button>`,
+    `<button class="button" data-action="import-template">Импорт шаблона</button><button class="button" data-route="log">Журнал</button><button class="button primary" data-route="transform">Трансформация</button>`,
   );
 }
 
@@ -584,6 +858,7 @@ function activeQuests() {
 }
 
 function questCard(quest) {
+  const doneToday = quest.type === "Ежедневный" && todayQuestIds().includes(quest.id);
   return `
     <article class="quest-card">
       <div>
@@ -598,8 +873,46 @@ function questCard(quest) {
         <div class="reward-line">+${quest.xp} XP · +${quest.coins} монет · ${quest.stats.map(escapeHtml).join(" / ")}</div>
       </div>
       <div class="card-actions">
-        ${quest.status === "Активен" ? `<button class="icon-button" title="Завершить" data-complete="${quest.id}">${icon.check}</button>` : `<span class="tag accent">Завершён</span>`}
+        ${quest.status === "Активен" && !doneToday ? `<button class="icon-button" title="Завершить" data-complete="${quest.id}">${icon.check}</button>` : `<span class="tag accent">${doneToday ? "Сегодня закрыт" : "Завершён"}</span>`}
         <button class="icon-button subtle" title="Удалить" data-delete-quest="${quest.id}">${icon.x}</button>
+      </div>
+    </article>
+  `;
+}
+
+function bossCard(boss) {
+  return `
+    <article class="quest-card boss-card">
+      <div>
+        <h4>${escapeHtml(boss.title)}</h4>
+        <p>${escapeHtml(boss.steps?.join(" → ") || "High-risk quest")}</p>
+        <div class="meta-row">
+          <span class="tag accent">${escapeHtml(boss.sphere)}</span>
+          <span class="tag">Risk: ${escapeHtml(boss.risk)}</span>
+          <span class="tag">Reward: ${escapeHtml(boss.reward)}</span>
+        </div>
+        <div class="reward-line">+${boss.xp} XP · +${boss.coins} монет${boss.rewardGroup ? ` · ${escapeHtml(boss.rewardGroup)}` : ""}</div>
+      </div>
+      <div class="card-actions">
+        ${boss.status === "Побеждён" ? `<span class="tag accent">Побеждён</span>` : `<button class="button primary" data-complete-boss="${boss.id}">Defeat</button>`}
+      </div>
+    </article>
+  `;
+}
+
+function achievementCard(achievement) {
+  const unlocked = state.unlockedAchievements.includes(achievement.id);
+  return `
+    <article class="achievement-card ${unlocked ? "unlocked" : ""}">
+      <div class="achievement-medal">${unlocked ? "✓" : "?"}</div>
+      <div>
+        <h4>${escapeHtml(achievement.title)}</h4>
+        <p>${escapeHtml(achievement.condition)}</p>
+        <div class="meta-row">
+          <span class="tag">${escapeHtml(achievement.category)}</span>
+          <span class="tag accent">${escapeHtml(achievement.rarity)}</span>
+          <span class="tag">${unlocked ? "Открыта" : "Закрыта"}</span>
+        </div>
       </div>
     </article>
   `;
@@ -629,9 +942,9 @@ function statCard(stat) {
 
 function rewardCard(reward) {
   return `
-    <article class="reward-card ${reward.status === "Получена" ? "muted-card" : ""}">
-      <div><h4>${escapeHtml(reward.title)}</h4><p>${escapeHtml(reward.category)}</p></div>
-      <button class="button" data-redeem="${reward.id}" ${reward.status === "Получена" ? "disabled" : ""}>${reward.cost} · ${reward.status === "Получена" ? "Получена" : "Взять"}</button>
+    <article class="reward-card">
+      <div><h4>${escapeHtml(reward.title)}</h4><p>${escapeHtml(reward.category)}${reward.redemptions ? ` · ${reward.redemptions}x` : ""}</p></div>
+      <button class="button" data-redeem="${reward.id}">${reward.cost} · Взять</button>
     </article>
   `;
 }
@@ -659,6 +972,7 @@ function heroEditor() {
       <label class="field full"><span class="label">Миссия</span><textarea class="textarea" name="mission">${escapeHtml(state.hero.mission)}</textarea></label>
       <label class="field full"><span class="label">Девиз</span><input class="input" name="motto" value="${escapeHtml(state.hero.motto)}"></label>
       <div class="theme-grid full">${Object.entries(themes).map(([key, theme]) => `<button type="button" class="theme-card ${state.theme === key ? "active" : ""}" data-theme-choice="${key}"><span class="theme-gem" style="background:${theme.accent}"></span><strong>${theme.label}</strong></button>`).join("")}</div>
+      <div class="visual-picker full">${heroVisuals.map((visual) => `<button type="button" class="visual-card ${state.hero.visual === visual.id ? "active" : ""}" data-hero-visual="${visual.id}"><span class="visual-thumb" style="background-position:${visual.position}"></span><strong>${visual.label}</strong></button>`).join("")}</div>
       <button class="button primary" type="submit">Сохранить героя</button>
     </form>
   `;
@@ -694,6 +1008,58 @@ function questForm() {
   `;
 }
 
+function bossScreen() {
+  return shell(
+    "Boss Fights",
+    "Высокий риск, высокая награда: отдельные испытания, которые меняют идентичность героя.",
+    `
+      <div class="grid">
+        <section class="panel"><div class="panel-header"><h3 class="panel-title">Boss templates</h3><button class="button" data-action="import-bosses">Добавить шаблоны</button></div>
+          <div class="panel-inner mini-grid">
+            ${bossTemplates.map((boss) => `<article class="small-card"><strong>${escapeHtml(boss.title)}</strong><small>${escapeHtml(boss.risk)} · +${boss.xp} XP</small></article>`).join("")}
+          </div>
+        </section>
+        <section class="panel"><div class="panel-header"><h3 class="panel-title">Активные боссы</h3><span class="tag">${state.bossFights.length}</span></div>
+          <div class="panel-inner quest-list">${state.bossFights.map(bossCard).join("") || empty("Boss fights пока нет. Импортируй шаблоны или создай Босс-квест.")}</div>
+        </section>
+      </div>
+    `,
+  );
+}
+
+function achievementsScreen() {
+  return shell(
+    "Ачивки",
+    "Значимые события героя: locked, ready и unlocked состояния.",
+    `
+      <section class="panel">
+        <div class="panel-header"><h3 class="panel-title">Badges</h3><span class="tag accent">${state.unlockedAchievements.length}/${achievementCatalog.length}</span></div>
+        <div class="panel-inner achievement-grid">${achievementCatalog.map(achievementCard).join("")}</div>
+      </section>
+    `,
+  );
+}
+
+function logScreen() {
+  const entries = state.progressLog.slice(0, 80);
+  const types = [...new Set(state.progressLog.map((entry) => entry.type))];
+  return shell(
+    "Журнал прогресса",
+    "Event ledger: квесты, боссы, награды, ачивки, импорт и экспорт.",
+    `
+      <section class="panel">
+        <div class="panel-header">
+          <div><h3 class="panel-title">Ledger</h3><p class="panel-note">Всего событий: ${state.progressLog.length}. Типы: ${types.join(", ") || "—"}.</p></div>
+          <button class="button" data-action="export-progress">Export JSON</button>
+        </div>
+        <div class="panel-inner review-list">
+          ${entries.map((entry) => `<article class="review-item"><span>${new Date(entry.timestamp).toLocaleDateString()}</span><strong>${escapeHtml(entry.title)}</strong><small>${escapeHtml(entry.type)} · ${entry.xp >= 0 ? "+" : ""}${entry.xp} XP · ${entry.coins >= 0 ? "+" : ""}${entry.coins} монет · ${escapeHtml(entry.sphere || "")}</small></article>`).join("") || empty("Журнал пуст. Заверши квест или босса.")}
+        </div>
+      </section>
+    `,
+  );
+}
+
 function builderListScreen(kind) {
   const isSphere = kind === "spheres";
   const list = isSphere ? state.spheres : state.stats;
@@ -719,13 +1085,14 @@ function builderListScreen(kind) {
 }
 
 function transformScreen() {
+  const visual = heroVisuals.find((item) => item.id === state.hero.visual) || heroVisuals[0];
   return shell(
     "Трансформация",
     "Не просто уровни: герой меняет стадию развития и визуальную идентичность.",
     `
       <div class="transform-grid">
         <section class="panel hero-forge compact-forge">
-          <div class="forge-figure"><div class="body-silhouette evolved-${state.hero.evolution}"><span>${evolutionName()}</span></div><div class="forge-rings"></div></div>
+          <div class="forge-figure"><div class="body-silhouette evolved-${state.hero.evolution}" style="background-position:${visual.position}"><span>${evolutionName()}</span></div><div class="forge-rings"></div></div>
           <button class="button primary" data-action="transform">Трансформировать героя</button>
         </section>
         <section class="panel"><div class="panel-header"><h3 class="panel-title">Путь эволюции</h3></div><div class="panel-inner evolution-list">
@@ -781,10 +1148,14 @@ function reviewScreen() {
 function settingsScreen() {
   return shell(
     "Настройки",
-    "Управление миром, шаблонами и сбросом.",
+    "Управление миром, шаблонами, импортом, экспортом и сбросом.",
     `
       <div class="grid">
-        <section class="panel"><div class="panel-header"><h3 class="panel-title">Шаблоны</h3></div><div class="panel-inner"><button class="button" data-action="import-template">Импортировать стартовый шаблон</button></div></section>
+        <section class="panel"><div class="panel-header"><h3 class="panel-title">Backup</h3></div><div class="panel-inner control-grid">
+          <div><h4>Export JSON</h4><p class="muted">Сохраняет героя, квесты, боссы, ачивки, награды и журнал прогресса.</p><button class="button primary" data-action="export-progress">Export backup</button></div>
+          <div><h4>Import JSON</h4><p class="muted">Восстанавливает сохранение и пересчитывает ачивки.</p><label class="button file-button">Import backup<input type="file" accept="application/json,.json" data-import-file></label></div>
+        </div></section>
+        <section class="panel"><div class="panel-header"><h3 class="panel-title">Шаблоны</h3></div><div class="panel-inner actions"><button class="button" data-action="import-template">Импортировать стартовый шаблон</button><button class="button" data-action="import-bosses">Добавить boss fights</button></div></section>
         <section class="panel"><div class="panel-header"><h3 class="panel-title">Опасная зона</h3></div><div class="panel-inner"><button class="button danger" data-action="hard-reset">Удалить мир и начать с нуля</button></div></section>
       </div>
     `,
@@ -819,6 +1190,9 @@ function render() {
     rewards: rewardsScreen,
     review: reviewScreen,
     settings: settingsScreen,
+    boss: bossScreen,
+    achievements: achievementsScreen,
+    log: logScreen,
   };
   document.querySelector("#app").innerHTML = (views[state.route] || dashboard)();
 }
@@ -847,6 +1221,15 @@ document.addEventListener("click", (event) => {
   if (archetype) {
     persistVisibleSetupForm();
     state.hero.archetype = archetype;
+    if (heroVisuals.some((visual) => visual.id === archetype)) state.hero.visual = archetype;
+    saveState();
+    render();
+  }
+
+  const heroVisual = event.target.closest("[data-hero-visual]")?.dataset.heroVisual;
+  if (heroVisual) {
+    persistVisibleSetupForm();
+    state.hero.visual = heroVisual;
     saveState();
     render();
   }
@@ -885,9 +1268,19 @@ document.addEventListener("click", (event) => {
     saveState();
     render();
   }
-  if (action === "import-and-finish") finishSetup(true);
+  if (action === "empty-and-finish") finishSetup(false);
   if (action === "import-template") {
     importTemplate();
+    saveState();
+    render();
+  }
+  if (action === "import-bosses") {
+    importBossTemplates();
+    saveState();
+    render();
+  }
+  if (action === "export-progress") {
+    exportProgress();
     saveState();
     render();
   }
@@ -897,11 +1290,15 @@ document.addEventListener("click", (event) => {
   const complete = event.target.closest("[data-complete]")?.dataset.complete;
   if (complete) completeQuest(complete);
 
+  const completeBossId = event.target.closest("[data-complete-boss]")?.dataset.completeBoss;
+  if (completeBossId) completeBoss(completeBossId);
+
   const redeem = event.target.closest("[data-redeem]")?.dataset.redeem;
   if (redeem) redeemReward(redeem);
 
   const deleteQuest = event.target.closest("[data-delete-quest]")?.dataset.deleteQuest;
   if (deleteQuest) {
+    if (!confirm("Удалить этот квест?")) return;
     state.quests = state.quests.filter((quest) => quest.id !== deleteQuest);
     saveState();
     render();
@@ -909,6 +1306,16 @@ document.addEventListener("click", (event) => {
 
   const deleteSphere = event.target.closest("[data-delete-sphere]")?.dataset.deleteSphere;
   if (deleteSphere) {
+    const sphere = state.spheres.find((item) => item.id === deleteSphere);
+    const isReferenced = sphere && (
+      state.quests.some((quest) => quest.sphere === sphere.name) ||
+      state.bossFights.some((boss) => boss.sphere === sphere.name)
+    );
+    if (isReferenced) {
+      toast("Сфера используется в квестах или boss fights.");
+      return;
+    }
+    if (!confirm("Удалить эту сферу?")) return;
     state.spheres = state.spheres.filter((item) => item.id !== deleteSphere);
     saveState();
     render();
@@ -916,10 +1323,24 @@ document.addEventListener("click", (event) => {
 
   const deleteStat = event.target.closest("[data-delete-stat]")?.dataset.deleteStat;
   if (deleteStat) {
+    const stat = state.stats.find((item) => item.id === deleteStat);
+    const isReferenced = stat && state.quests.some((quest) => quest.stats.includes(stat.name));
+    if (isReferenced) {
+      toast("Характеристика используется в квестах.");
+      return;
+    }
+    if (!confirm("Удалить эту характеристику?")) return;
     state.stats = state.stats.filter((item) => item.id !== deleteStat);
     saveState();
     render();
   }
+});
+
+document.addEventListener("change", (event) => {
+  const input = event.target.closest("[data-import-file]");
+  if (!input?.files?.[0]) return;
+  importProgressFile(input.files[0]);
+  input.value = "";
 });
 
 document.addEventListener("submit", (event) => {
@@ -936,7 +1357,7 @@ document.addEventListener("submit", (event) => {
   }
   if (form.matches('[data-form="quest"]')) {
     createQuest(data);
-    toast("Квест создан.");
+    toast(data.get("type") === "Босс" ? "Boss fight создан." : "Квест создан.");
   }
   if (form.matches('[data-form="reward"]')) {
     createReward(data);
