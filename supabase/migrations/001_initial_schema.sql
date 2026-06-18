@@ -411,6 +411,7 @@ create policy "Users manage own weekly reviews"
 create table public.public_profiles (
   user_id uuid primary key references auth.users(id) on delete cascade,
   slug text not null unique,
+  community_code text not null unique,
   display_name text not null,
   headline text,
   avatar_url text,
@@ -426,6 +427,7 @@ create table public.guilds (
   focus text,
   motto text,
   visibility text not null default 'public',
+  invite_code text not null unique default upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 10)),
   member_count integer not null default 0 check (member_count >= 0),
   created_at timestamptz not null default now()
 );
@@ -446,6 +448,8 @@ create table public.raids (
   duration_days integer not null check (duration_days > 0),
   reward_xp integer not null default 0 check (reward_xp >= 0),
   reward_coins integer not null default 0 check (reward_coins >= 0),
+  participant_count integer not null default 0 check (participant_count >= 0),
+  invite_payload jsonb not null default '{}'::jsonb,
   status text not null default 'open',
   starts_on date,
   ends_on date,
@@ -472,12 +476,34 @@ create table public.telegram_settings (
   updated_at timestamptz not null default now()
 );
 
+create table public.community_invites (
+  id uuid primary key default gen_random_uuid(),
+  owner_user_id uuid not null references auth.users(id) on delete cascade,
+  kind text not null check (kind in ('profile', 'guild', 'raid')),
+  target_id uuid,
+  invite_code text not null unique,
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz
+);
+
+create table public.telegram_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade,
+  event_type text not null,
+  payload jsonb not null default '{}'::jsonb,
+  processed_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
 alter table public.public_profiles enable row level security;
 alter table public.guilds enable row level security;
 alter table public.guild_members enable row level security;
 alter table public.raids enable row level security;
 alter table public.raid_participants enable row level security;
 alter table public.telegram_settings enable row level security;
+alter table public.community_invites enable row level security;
+alter table public.telegram_events enable row level security;
 
 create policy "Public profiles are readable when enabled"
   on public.public_profiles for select
@@ -515,3 +541,16 @@ create policy "Users manage own Telegram settings"
   on public.telegram_settings for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
+
+create policy "Public community invites are readable"
+  on public.community_invites for select
+  using (expires_at is null or expires_at > now());
+
+create policy "Users manage own community invites"
+  on public.community_invites for all
+  using (auth.uid() = owner_user_id)
+  with check (auth.uid() = owner_user_id);
+
+create policy "Users read own Telegram events"
+  on public.telegram_events for select
+  using (auth.uid() = user_id);

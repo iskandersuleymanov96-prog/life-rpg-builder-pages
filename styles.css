@@ -1,4 +1,4 @@
-/* RPG Life v2.5 — Production Styles */
+/* RPG Life v2.6 — Production Styles */
 
 /* ─── Variables ─────────────────────────────────────────────────── */
 :root {
@@ -213,8 +213,13 @@ svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.7;
 .share-url code { min-width:0; overflow:hidden; text-overflow:ellipsis; color:var(--accent-2); }
 .telegram-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }
 .security-note { margin:12px 0 0; padding:10px 12px; border:1px solid color-mix(in srgb, var(--warning) 32%, transparent); border-radius:var(--radius); background:color-mix(in srgb, var(--warning) 8%, rgba(255,255,255,0.035)); color:var(--muted); font-size:12px; line-height:1.45; }
+.community-command .panel-inner { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:18px; align-items:center; background:linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, transparent), rgba(255,255,255,0.035)); }
+.community-command h3 { margin:5px 0 7px; font-size:24px; }
+.community-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:10px; }
 .community-card { display:grid; gap:14px; }
 .community-card strong { display:block; margin-top:6px; font-size:22px; letter-spacing:0; }
+.community-form { margin-bottom:16px; padding-bottom:16px; border-bottom:1px solid var(--line); }
+.community-list { margin-top:0; }
 .brand-editor { display:grid; grid-template-columns:minmax(260px,0.45fr) minmax(0,1fr); gap:16px; align-items:start; }
 .brand-preview { display:grid; grid-template-columns:auto minmax(0,1fr); gap:12px; align-items:center; padding:14px; border:1px solid var(--line); border-radius:var(--radius); background:rgba(255,255,255,0.035); }
 .brand-preview strong, .brand-preview span, .brand-preview small { display:block; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -432,7 +437,8 @@ input[type="range"]::-moz-range-thumb { width:18px; height:18px; border-radius:5
   .nav { grid-template-columns:repeat(3, minmax(0,1fr)); }
   .nav-rail { grid-template-columns:repeat(5, minmax(40px,1fr)); }
   .sidebar-footer { position:static; margin-top:14px; }
-  .dashboard-grid, .main-grid, .setup-grid, .split, .transform-grid { grid-template-columns:1fr; }
+  .dashboard-grid, .main-grid, .setup-grid, .split, .transform-grid, .community-command .panel-inner { grid-template-columns:1fr; }
+  .community-actions { justify-content:flex-start; }
   .main-stage { min-height:520px; }
   .hero-forge { min-height:auto; }
 }
