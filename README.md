@@ -5,7 +5,7 @@ Dark premium MVP for a personal life-RPG system. Create a hero, customize the wo
 ## Features
 
 - **Hero Profile** — Name, codename, archetype, mission, motto, evolution stages
-- **Main Character Scene** — Animated full-body RPG character, user logo, and custom background upload
+- **Main Character Scene** — Animated RPG scene, user logo, custom world background upload, and custom character upload
 - **XP & Leveling** — Progress through levels with exponential XP curves
 - **Quest System** — Daily, Weekly, Main, Side, and Boss (Trial) quests
 - **Habit Tracker** — Daily/weekly habits with streak tracking and weekly scores
@@ -18,10 +18,10 @@ Dark premium MVP for a personal life-RPG system. Create a hero, customize the wo
 - **Comeback Bonus** — Rewards for returning after absences
 - **Theme System** — 5 color themes (Frost, Gold, Crimson, Violet, Steel)
 - **Dark/Light Mode** — Toggle between themes
-- **Appearance Studio** — Background presets, custom images, dim control
+- **Appearance Studio** — Background presets, custom images up to 50 MB, character images up to 50 MB, dim control
 - **Import/Export** — JSON backup and restore
 - **Responsive** — Works on desktop, tablet, and mobile
-- **Version** — `2.2.0`
+- **Version** — `2.3.0`
 
 ## Local Run
 
@@ -45,7 +45,8 @@ Static app. Deploy to Vercel from repository root:
 
 - Vanilla JavaScript (ES modules)
 - CSS custom properties + responsive grid
-- localStorage persistence
+- localStorage persistence for state
+- IndexedDB asset storage for larger character/background images
 - Web Audio API for sound effects
 - Canvas particle system for celebrations
 

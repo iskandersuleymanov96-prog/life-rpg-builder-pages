@@ -1,7 +1,10 @@
-// RPG Life v2.2 — Production Build
-const VERSION = "2.2.0";
+// RPG Life v2.3 — Production Build
+const VERSION = "2.3.0";
 const APP_NAME = "Live RPG";
 const STORAGE_KEY = "rpg-life-state-v3";
+const ASSET_DB = "live-rpg-assets";
+const ASSET_STORE = "files";
+const ASSET_LIMIT_BYTES = 50 * 1024 * 1024;
 const DAILY_XP_CAP = 300;
 const STREAK_MULT_CAP = 3.0;
 
@@ -162,8 +165,8 @@ const EVOLUTION_STAGES = [
 const EMPTY = {
   version: VERSION, route: "setup", setupStep: 0, onboardingComplete: false,
   theme: "ice", darkMode: true, soundEnabled: true,
-  hero: { name:"", codename:"", archetype:"", level:1, xp:0, coins:0, season:"Season 01: Foundation", mission:"", motto:"", evolution:0, visual:"creator" },
-  appearance: { bgPreset:"worldwalker", customBg:"", bgDim:72, density:"compact" },
+  hero: { name:"", codename:"", archetype:"", level:1, xp:0, coins:0, season:"Season 01: Foundation", mission:"", motto:"", evolution:0, visual:"creator", customCharacterKey:"", customCharacterName:"" },
+  appearance: { bgPreset:"worldwalker", customBg:"", customBgKey:"", customBgName:"", bgDim:48, density:"compact" },
   streak: { current:0, best:0, lastCheckIn:"", totalCheckIns:0 },
   habits: [], skillTree: { unlocked:[] }, prestige: { level:0, totalXP:0, bonus:0 },
   activeDetail: null,
@@ -173,6 +176,7 @@ const EMPTY = {
 };
 
 let S = load();
+const assetUrls = { background:"", character:"" };
 applyTheme();
 
 // ─── Persistence ──────────────────────────────────────────────────────
@@ -192,6 +196,7 @@ function sanitize(raw) {
   if (n.route === "hero") n.route = "main";
   n.hero = { ...b.hero, ...(raw?.hero||{}) };
   n.appearance = { ...b.appearance, ...(raw?.appearance||{}) };
+  if (!n.appearance.customBgKey && n.appearance.customBg?.startsWith?.("data:")) n.appearance.customBgName ||= "Старый фон";
   n.streak = { ...b.streak, ...(raw?.streak||{}) };
   n.prestige = { ...b.prestige, ...(raw?.prestige||{}) };
   n.skillTree = { ...b.skillTree, ...(raw?.skillTree||{}) };
@@ -212,11 +217,70 @@ function sanitize(raw) {
   return finalize(n, false);
 }
 
+// ─── Large Asset Store ────────────────────────────────────────────────
+function openAssetDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(ASSET_DB, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(ASSET_STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function putAsset(key, blob) {
+  const db = await openAssetDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(ASSET_STORE, "readwrite");
+    tx.objectStore(ASSET_STORE).put(blob, key);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+  });
+}
+
+async function getAsset(key) {
+  if (!key) return null;
+  const db = await openAssetDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(ASSET_STORE, "readonly");
+    const req = tx.objectStore(ASSET_STORE).get(key);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+    tx.oncomplete = () => db.close();
+  });
+}
+
+async function deleteAsset(key) {
+  if (!key) return;
+  const db = await openAssetDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(ASSET_STORE, "readwrite");
+    tx.objectStore(ASSET_STORE).delete(key);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+  });
+}
+
+function setAssetUrl(slot, blob) {
+  if (assetUrls[slot]?.startsWith("blob:")) URL.revokeObjectURL(assetUrls[slot]);
+  assetUrls[slot] = blob ? URL.createObjectURL(blob) : "";
+}
+
+async function restoreAssets(shouldRender=true) {
+  try {
+    setAssetUrl("background", await getAsset(S.appearance?.customBgKey));
+    setAssetUrl("character", await getAsset(S.hero?.customCharacterKey));
+    applyTheme();
+    if (shouldRender) render();
+  } catch {
+    toast("Не удалось загрузить локальные изображения.");
+  }
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────
 function uid()        { return globalThis.crypto?.randomUUID ? crypto.randomUUID() : `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`; }
 function dateKey(d=new Date()) { return d.toISOString().slice(0,10); }
 function esc(v)       { return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;"); }
-function qLabel(v)    { return ({ Daily:"Ежедневный", Weekly:"Еженедельный", Main:"Главный", Side:"Побочный", Boss:"Испытание", Easy:"Лёгкий", Normal:"Нормальный", Hard:"Сложный", Trial:"Испытание" })[v] || v; }
+function qLabel(v)    { return ({ Daily:"Ежедневный", Weekly:"Еженедельный", Main:"Главный", Side:"Побочный", Boss:"Испытание", Easy:"Лёгкий", Normal:"Нормальный", Hard:"Сложный", Trial:"Испытание", daily:"каждый день", weekdays:"будни", weekly:"раз в неделю" })[v] || v; }
 function byName(l,n)  { return l.find(i => i.name === n); }
 function xpFor(lv)    { return Math.round(120 * Math.pow(lv, 1.32)); }
 function evoName()    { return (EVOLUTION_STAGES[S.hero.evolution]||EVOLUTION_STAGES[0]).name; }
@@ -263,14 +327,14 @@ function applyTheme() {
   const t = THEMES[S.theme] || THEMES.ice;
   const a = S.appearance || EMPTY.appearance;
   const preset = BACKGROUND_PRESETS[a.bgPreset] || BACKGROUND_PRESETS.worldwalker;
-  const bg = a.customBg ? `url("${a.customBg}")` : preset.image;
+  const bg = assetUrls.background ? `url("${assetUrls.background}")` : (a.customBg ? `url("${a.customBg}")` : preset.image);
   document.documentElement.dataset.theme = S.darkMode ? S.theme : "light";
   document.documentElement.dataset.density = a.density || "compact";
   document.documentElement.style.setProperty("--accent", t.accent);
   document.documentElement.style.setProperty("--accent-2", t.accent2);
   document.documentElement.style.setProperty("--aura", t.aura);
   document.documentElement.style.setProperty("--scene-bg", bg);
-  document.documentElement.style.setProperty("--scene-dim", String(Math.min(92,Math.max(35,Number(a.bgDim||72)))/100));
+  document.documentElement.style.setProperty("--scene-dim", String(Math.min(92,Math.max(15,Number(a.bgDim||48)))/100));
 }
 
 // ─── Sound ────────────────────────────────────────────────────────────
@@ -280,6 +344,7 @@ function getAudio() { if (!audioCtx) try { audioCtx = new (window.AudioContext||
 function playSound(type) {
   if (!S.soundEnabled) return;
   const ctx = getAudio(); if (!ctx) return;
+  ctx.resume?.();
   const osc = ctx.createOscillator(), gain = ctx.createGain();
   osc.connect(gain); gain.connect(ctx.destination);
   gain.gain.setValueAtTime(0.15, ctx.currentTime);
@@ -405,13 +470,17 @@ function showCelebration(type) {
 }
 
 // ─── Quest Logic ──────────────────────────────────────────────────────
-function createQuest(data) {
-  const title = data.get("title")?.trim();
+function dataValue(data, name, fallbackForm=null) {
+  return data.get(name)?.trim?.() || fallbackForm?.querySelector?.(`[name="${name}"]`)?.value?.trim?.() || "";
+}
+
+function createQuest(data, fallbackForm=null) {
+  const title = dataValue(data, "title", fallbackForm);
   if (!title) return;
   if ((data.get("type")||"") === "Boss") {
     S.bossFights.unshift({
       id:uid(), title, sphere:data.get("sphere")||S.spheres[0]?.name||"General",
-      risk:data.get("description")?.trim()||"Major personal barrier.", reward:"Unlock next identity layer",
+      risk:dataValue(data, "description", fallbackForm)||"Major personal barrier.", reward:"Unlock next identity layer",
       xp:Number(data.get("xp")||220), coins:Number(data.get("coins")||120),
       steps:["Определи критерий победы","Сделай первый видимый шаг","Заверши финальное действие"],
       status:"active", completedSteps:[],
@@ -420,12 +489,12 @@ function createQuest(data) {
   }
   S.quests.unshift({
     id:uid(), title,
-    description:data.get("description")?.trim()||"Real action that moves the hero forward.",
+    description:dataValue(data, "description", fallbackForm)||"Real action that moves the hero forward.",
     type:data.get("type")||"Daily", sphere:data.get("sphere")||S.spheres[0]?.name||"General",
     difficulty:data.get("difficulty")||"Normal",
     xp:Number(data.get("xp")||40), coins:Number(data.get("coins")||15),
     stats:[data.get("stat")||S.stats[0]?.name||"Focus"],
-    status:"active", deadline:data.get("deadline")?.trim()||"Flexible",
+    status:"active", deadline:dataValue(data, "deadline", fallbackForm)||"Flexible",
   });
 }
 
@@ -484,15 +553,15 @@ function completeBoss(id) {
 }
 
 function deleteQuest(id) {
-  if (!confirm("Delete quest?")) return;
+  if (!confirm("Удалить квест?")) return;
   S.quests = S.quests.filter(q => q.id !== id); save(); render();
 }
 
 // ─── Habit Logic ──────────────────────────────────────────────────────
-function createHabit(data) {
-  const title = data.get("title")?.trim();
+function createHabit(data, fallbackForm=null) {
+  const title = dataValue(data, "title", fallbackForm);
   if (!title) return;
-  S.habits.push({ id:uid(), title, icon:data.get("icon")?.trim()||"\u2B50", frequency:data.get("frequency")||"daily", sphere:data.get("sphere")||S.spheres[0]?.name||"Discipline", completedDates:[], createdAt:new Date().toISOString() });
+  S.habits.push({ id:uid(), title, icon:dataValue(data, "icon", fallbackForm)||"\u2B50", frequency:data.get("frequency")||"daily", sphere:data.get("sphere")||S.spheres[0]?.name||"Discipline", completedDates:[], createdAt:new Date().toISOString() });
 }
 
 function completeHabit(id) {
@@ -501,7 +570,7 @@ function completeHabit(id) {
   const today = dateKey();
   if (h.completedDates.includes(today)) {
     h.completedDates = h.completedDates.filter(d => d !== today);
-    toast("Habit unchecked.");
+    toast("Привычка снята.");
   } else {
     h.completedDates.push(today);
     S.hero.xp += 15; S.hero.coins += 5; maybeLevel(S.hero);
@@ -512,7 +581,7 @@ function completeHabit(id) {
 }
 
 function deleteHabit(id) {
-  if (!confirm("Delete habit?")) return;
+  if (!confirm("Удалить привычку?")) return;
   S.habits = S.habits.filter(h => h.id !== id); save(); render();
 }
 
@@ -533,10 +602,10 @@ function habitWeekScore() {
 }
 
 // ─── Reward Logic ─────────────────────────────────────────────────────
-function createReward(data) {
-  const title = data.get("title")?.trim();
+function createReward(data, fallbackForm=null) {
+  const title = dataValue(data, "title", fallbackForm);
   if (!title) return;
-  S.rewards.push({ id:uid(), title, cost:Number(data.get("cost")||100), category:data.get("category")?.trim()||"Personal", status:"active" });
+  S.rewards.push({ id:uid(), title, cost:Number(data.get("cost")||100), category:dataValue(data, "category", fallbackForm)||"Personal", status:"active" });
 }
 
 function redeemReward(id) {
@@ -618,18 +687,45 @@ function importFile(file) {
   reader.readAsText(file);
 }
 
+async function importImageAsset(file, kind) {
+  if (!file || !file.type.startsWith("image/")) { toast("Выбери изображение."); return; }
+  if (file.size > ASSET_LIMIT_BYTES) { toast("Файл слишком большой. Максимум 50 MB."); return; }
+  const key = `${kind}-${uid()}`;
+  try {
+    await putAsset(key, file);
+    if (kind === "background") {
+      await deleteAsset(S.appearance.customBgKey);
+      S.appearance.customBgKey = key;
+      S.appearance.customBgName = file.name;
+      S.appearance.customBg = "";
+      S.appearance.bgPreset = "custom";
+      setAssetUrl("background", file);
+      toast("Фон мира обновлён.");
+    } else {
+      await deleteAsset(S.hero.customCharacterKey);
+      S.hero.customCharacterKey = key;
+      S.hero.customCharacterName = file.name;
+      setAssetUrl("character", file);
+      toast("Персонаж обновлён.");
+    }
+    applyTheme(); save(); render();
+  } catch {
+    toast("Не удалось сохранить изображение. Попробуй файл поменьше.");
+  }
+}
+
 function importBgFile(file) {
-  if (!file||!file.type.startsWith("image/")) { toast("Выбери изображение."); return; }
-  if (file.size > 1_000_000) { toast("Фон слишком большой. Выбери изображение до 1 MB."); return; }
-  const reader = new FileReader();
-  reader.onload = () => { S.appearance.customBg = String(reader.result); S.appearance.bgPreset="custom"; applyTheme(); save(); toast("Фон Main обновлён."); render(); };
-  reader.readAsDataURL(file);
+  importImageAsset(file, "background");
+}
+
+function importCharacterFile(file) {
+  importImageAsset(file, "character");
 }
 
 function hardReset() {
   if (!confirm("Удалить весь прогресс и начать заново?")) return;
   S = structuredClone(EMPTY);
-  localStorage.removeItem(STORAGE_KEY); applyTheme(); render();
+  localStorage.removeItem(STORAGE_KEY); setAssetUrl("background", null); setAssetUrl("character", null); applyTheme(); render();
 }
 
 // ─── Skill Tree ───────────────────────────────────────────────────────
@@ -644,6 +740,17 @@ function unlockSkill(id) {
 
 // ─── Setup / Onboarding ──────────────────────────────────────────────
 function finishSetup(useTpl=false) {
+  captureSetupStep();
+  if (!S.hero.name) S.hero.name = "Новый герой";
+  if (!S.hero.archetype) S.hero.archetype = "custom";
+  if (!S.spheres.length) ["Тело","Разум","Дисциплина"].forEach(n => S.spheres.push({id:uid(),name:n,level:1,xp:0,active:true}));
+  if (!S.stats.length) ["Фокус","Дисциплина","Мастерство"].forEach(n => S.stats.push({id:uid(),name:n,level:1,xp:0,active:true}));
+  if (useTpl) importTemplate(S.hero.archetype);
+  S.onboardingComplete = true; S.route = "main"; S.lastLoginDate = dateKey();
+  save(); render();
+}
+
+function captureSetupStep() {
   const form = document.querySelector(".setup-form");
   if (form instanceof HTMLFormElement) {
     const d = new FormData(form);
@@ -652,16 +759,9 @@ function finishSetup(useTpl=false) {
       S.hero.codename = d.get("codename")?.trim() || S.hero.codename;
       S.hero.mission = d.get("mission")?.trim() || S.hero.mission;
     }
-    if (form.matches('[data-form="first-quest"]') && d.get("title")?.trim()) createQuest(d);
-    if (form.matches('[data-form="first-reward"]') && d.get("title")?.trim()) createReward(d);
+    if (form.matches('[data-form="first-quest"]') && dataValue(d, "title", form)) createQuest(d, form);
+    if (form.matches('[data-form="first-reward"]') && dataValue(d, "title", form)) createReward(d, form);
   }
-  if (!S.hero.name) S.hero.name = "Новый герой";
-  if (!S.hero.archetype) S.hero.archetype = "custom";
-  if (!S.spheres.length) ["Тело","Разум","Дисциплина"].forEach(n => S.spheres.push({id:uid(),name:n,level:1,xp:0,active:true}));
-  if (!S.stats.length) ["Фокус","Дисциплина","Мастерство"].forEach(n => S.stats.push({id:uid(),name:n,level:1,xp:0,active:true}));
-  if (useTpl) importTemplate(S.hero.archetype);
-  S.onboardingComplete = true; S.route = "main"; S.lastLoginDate = dateKey();
-  save(); render();
 }
 
 function toggleSphere(name) {
@@ -676,20 +776,43 @@ function toggleStat(name) {
   save(); render();
 }
 
+function trainSphere(id) {
+  const sp = S.spheres.find(s => s.id === id);
+  if (!sp) return;
+  sp.xp += 10;
+  maybeLevel(sp);
+  logProgress({ title:`Сфера: ${sp.name}`, type:"sphere", xp:10, coins:0, sphere:sp.name, comment:"Быстрая тренировка сферы." });
+  save(); playSound("checkin"); toast(`${sp.name}: +10 XP`); render();
+}
+
+function trainStat(id) {
+  const st = S.stats.find(s => s.id === id);
+  if (!st) return;
+  st.xp += 10;
+  maybeLevel(st);
+  logProgress({ title:`Стат: ${st.name}`, type:"stat", xp:10, coins:0, stats:[st.name], comment:"Быстрая тренировка характеристики." });
+  save(); playSound("checkin"); toast(`${st.name}: +10 XP`); render();
+}
+
 // ─── Render Helpers ───────────────────────────────────────────────────
-function btn(label, cls="", attrs="") { return `<button class="btn ${cls}" ${attrs}>${label}</button>`; }
+function btn(label, cls="", attrs="") { return `<button type="button" class="btn ${cls}" ${attrs}>${label}</button>`; }
 function emptyState(text) { return `<div class="empty">${text}</div>`; }
 function opt(v, label=v, sel=false) { return `<option value="${esc(v)}" ${sel?"selected":""}>${esc(label)}</option>`; }
+
+function heroAvatarContent() {
+  const arch = ARCHETYPES.find(a => a.id===S.hero.archetype)?.label || "Custom";
+  const fallback = esc((S.hero.codename||S.hero.name||"?").slice(0,2).toUpperCase());
+  const src = assetUrls.character || (S.hero.archetype ? `./assets/avatar-${S.hero.archetype}.svg` : "");
+  return src ? `<img src="${src}" alt="${esc(arch)}" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><span style="display:none">${fallback}</span>` : `<span>${fallback}</span>`;
+}
 
 function heroCard() {
   const next = xpFor(S.hero.level);
   const arch = ARCHETYPES.find(a => a.id===S.hero.archetype)?.label || "Custom";
   const m = streakMult();
-  const avatarSrc = S.hero.archetype ? `./assets/avatar-${S.hero.archetype}.svg` : "";
-  const avatarContent = avatarSrc ? `<img src="${avatarSrc}" alt="${esc(arch)}" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><span style="display:none">${esc((S.hero.codename||S.hero.name||"?").slice(0,2).toUpperCase())}</span>` : `<span>${esc((S.hero.codename||S.hero.name||"?").slice(0,2).toUpperCase())}</span>`;
   return `
     <section class="panel hero-card">
-      <div class="hero-avatar">${avatarContent}</div>
+      <div class="hero-avatar">${heroAvatarContent()}</div>
       <div class="hero-info">
         <h3>${esc(S.hero.name || "Новый герой")}</h3>
         <div class="tags">
@@ -816,6 +939,9 @@ function detailSheet() {
 // ─── Main ─────────────────────────────────────────────────────────────
 function mainScreen() {
   const archetype = ARCHETYPES.find(a => a.id === S.hero.archetype)?.label || "Custom";
+  const fallbackCharacter = S.hero.archetype ? `./assets/avatar-${S.hero.archetype}.svg` : "./assets/avatar-custom.svg";
+  const characterSrc = assetUrls.character || fallbackCharacter;
+  const characterClass = assetUrls.character ? "custom" : "default";
   const position = HERO_POSITIONS[S.hero.archetype] || HERO_POSITIONS.custom;
   const next = xpFor(S.hero.level);
   const topStats = [...S.stats].sort((a,b) => b.level-a.level || b.xp-a.xp).slice(0,6);
@@ -823,13 +949,16 @@ function mainScreen() {
     <div class="main-grid">
       <section class="panel main-stage-panel">
         <div class="main-stage">
-          <div class="scene-controls"><label class="icon-btn scene-upload" title="Загрузить свой фон">${I.plus}<input type="file" accept="image/*" data-background-file></label></div>
+          <div class="scene-controls">
+            <label class="icon-btn scene-upload" title="Загрузить фон мира">${I.plus}<input type="file" accept="image/*" data-background-file></label>
+            <label class="icon-btn scene-upload" title="Загрузить своего персонажа">${I.hero}<input type="file" accept="image/*" data-character-file></label>
+          </div>
           <div class="stage-ring"></div><div class="stage-floor"></div>
-          <div class="fullbody-character" style="background-position:${position}"></div>
+          <div class="fullbody-character ${characterClass}" style="--hero-position:${position}"><img src="${characterSrc}" alt="${esc(S.hero.name || "Персонаж")}"></div>
         </div>
         <div class="panel-inner main-caption">
-          <div><h3>${esc(S.hero.name || "Новый герой")}</h3><p>${esc(S.hero.mission || "Добавь миссию героя, чтобы Main стал твоей личной RPG-сценой.")}</p></div>
-          <button class="btn" data-route="settings">Сменить фон</button>
+          <div><h3>${esc(S.hero.name || "Новый герой")}</h3><p>${esc(S.hero.mission || "Добавь миссию героя, чтобы Main стал твоей личной RPG-сценой.")}</p><small class="asset-hint">${esc(S.hero.customCharacterName || "Можно загрузить своего персонажа до 50 MB.")}</small></div>
+          <div class="actions"><label class="btn file-btn">Сменить персонажа<input type="file" accept="image/*" data-character-file></label><label class="btn file-btn">Сменить фон<input type="file" accept="image/*" data-background-file></label></div>
         </div>
       </section>
       <div class="grid">
@@ -861,6 +990,7 @@ function dashboardScreen() {
   return shell("Сегодня", "Текущий сезон, активные квесты, привычки, сферы жизни и экономика наград.", `
     <div class="dashboard-grid"><div class="grid">
       ${heroCard()}
+      <section class="panel"><div class="panel-header"><h3 class="panel-title">Образ героя</h3><span class="tag">до 50 MB</span></div><div class="panel-inner visual-upload-row"><div class="hero-avatar xl">${heroAvatarContent()}</div><div><strong>${esc(S.hero.customCharacterName || "Свой персонаж не загружен")}</strong><p class="muted">Загрузи портрет, арт или full-body изображение героя. Оно появится на Main и в карточке героя.</p><div class="actions"><label class="btn btn-primary file-btn">Загрузить героя<input type="file" accept="image/*" data-character-file></label><label class="btn file-btn">Загрузить фон<input type="file" accept="image/*" data-background-file></label></div></div></div></section>
       <div class="streak-bar">
         <span class="streak-flame">\uD83D\uDD25</span>
         <div class="streak-info"><div class="streak-count">${S.streak.current} дней</div><div class="streak-label">Сейчас / рекорд: ${S.streak.best}</div><div class="streak-days">${sd.map(d => `<div class="streak-dot ${d.active?"active":""}"></div>`).join("")}</div></div>
@@ -914,12 +1044,12 @@ function bossCard(b) {
 
 function sphereCard(s) {
   const next = xpFor(s.level);
-  return `<article class="small-card"><div class="card-top"><strong>${esc(s.name)}</strong><span>Lv ${s.level}</span></div><div class="progress-bar progress-sm"><span style="width:${Math.min(100,(s.xp/next)*100)}%"></span></div><small>${s.xp}/${next} XP</small></article>`;
+  return `<article class="small-card clickable" data-train-sphere="${s.id}" tabindex="0" title="Клик: +10 XP"><div class="card-top"><strong>${esc(s.name)}</strong><span>Lv ${s.level}</span></div><div class="progress-bar progress-sm"><span style="width:${Math.min(100,(s.xp/next)*100)}%"></span></div><small>${s.xp}/${next} XP · клик для тренировки</small></article>`;
 }
 
 function statCard(s) {
   const next = xpFor(s.level);
-  return `<article class="small-card"><div class="card-top"><strong>${esc(s.name)}</strong><span>Lv ${s.level}</span></div><div class="progress-bar progress-sm"><span style="width:${Math.min(100,(s.xp/next)*100)}%"></span></div><small>${s.xp}/${next} XP</small></article>`;
+  return `<article class="small-card clickable" data-train-stat="${s.id}" tabindex="0" title="Клик: +10 XP"><div class="card-top"><strong>${esc(s.name)}</strong><span>Lv ${s.level}</span></div><div class="progress-bar progress-sm"><span style="width:${Math.min(100,(s.xp/next)*100)}%"></span></div><small>${s.xp}/${next} XP · клик для тренировки</small></article>`;
 }
 
 function rewardCard(r) {
@@ -972,32 +1102,32 @@ function questsScreen() {
 function habitsScreen() {
   const ws = habitWeekScore();
   const todayH = S.habits.filter(h => h.completedDates.includes(dateKey()));
-  return shell("Habits","Build habits, track streaks and watch progress.",`
+  return shell("Привычки","Создавай повторяемые действия, отмечай выполнение и прокачивай серию.",`
     <div class="grid"><div class="split">
-      <section class="panel"><div class="panel-header"><h3 class="panel-title">New Habit</h3></div><div class="panel-inner">
+      <section class="panel"><div class="panel-header"><h3 class="panel-title">Новая привычка</h3></div><div class="panel-inner">
         <form class="form-grid" data-form="habit">
-          <label class="field full"><span class="label">Title</span><input class="input" name="title" required placeholder="Meditation, workout, reading..."></label>
-          <label class="field"><span class="label">Icon</span><input class="input" name="icon" value="\u2B50" maxlength="4"></label>
-          <label class="field"><span class="label">Frequency</span><select class="select" name="frequency"><option value="daily">Daily</option><option value="weekdays">Weekdays</option><option value="weekly">Weekly</option></select></label>
-          <label class="field"><span class="label">Sphere</span><select class="select" name="sphere">${S.spheres.map(s => opt(s.name)).join("")}</select></label>
-          <button class="btn btn-primary" type="submit">${I.plus} Add</button>
+          <label class="field full"><span class="label">Название</span><input class="input" name="title" required placeholder="Медитация, тренировка, чтение"></label>
+          <label class="field"><span class="label">Иконка</span><input class="input" name="icon" value="\u2B50" maxlength="4"></label>
+          <label class="field"><span class="label">Частота</span><select class="select" name="frequency"><option value="daily">Каждый день</option><option value="weekdays">Будни</option><option value="weekly">Раз в неделю</option></select></label>
+          <label class="field"><span class="label">Сфера</span><select class="select" name="sphere">${S.spheres.map(s => opt(s.name)).join("")}</select></label>
+          <button class="btn btn-primary" type="submit">${I.plus} Добавить</button>
         </form>
       </div></section>
-      <section class="panel"><div class="panel-header"><h3 class="panel-title">Today</h3><span class="tag tag-accent">${todayH.length}/${S.habits.length}</span></div><div class="panel-inner habit-list">
-        ${S.habits.length===0?emptyState("Create your first habit."):S.habits.map(h => {
+      <section class="panel"><div class="panel-header"><h3 class="panel-title">Сегодня</h3><span class="tag tag-accent">${todayH.length}/${S.habits.length}</span></div><div class="panel-inner habit-list">
+        ${S.habits.length===0?emptyState("Создай первую привычку."):S.habits.map(h => {
           const done = h.completedDates.includes(dateKey());
           const hs = habitStreak(h);
           const wd = []; for(let i=6;i>=0;i--){ const d=dateKey(new Date(Date.now()-i*864e5)); wd.push({d,done:h.completedDates.includes(d),today:i===0}); }
           return `<div class="habit-card ${done?"completed":""}">
             <div class="habit-icon">${h.icon}</div>
-            <div class="habit-info"><h4>${esc(h.title)}</h4><p>${esc(h.sphere)} / ${h.frequency}</p><div class="habit-week">${wd.map(d => `<div class="habit-day ${d.done?"done":""} ${d.today?"today":""}"></div>`).join("")}</div></div>
-            <div class="habit-actions">${hs>0?`<div class="habit-streak"><span class="fire">\uD83D\uDD25</span> ${hs}</div>`:""}<button class="btn ${done?"":"btn-primary"}" data-complete-habit="${h.id}">${done?"Undo":"Done"}</button><button class="btn btn-danger" data-delete-habit="${h.id}" style="font-size:11px;min-height:28px;padding:0 8px;">Delete</button></div>
+            <div class="habit-info"><h4>${esc(h.title)}</h4><p>${esc(h.sphere)} / ${esc(qLabel(h.frequency))}</p><div class="habit-week">${wd.map(d => `<div class="habit-day ${d.done?"done":""} ${d.today?"today":""}"></div>`).join("")}</div></div>
+            <div class="habit-actions">${hs>0?`<div class="habit-streak"><span class="fire">\uD83D\uDD25</span> ${hs}</div>`:""}<button class="btn ${done?"":"btn-primary"}" data-complete-habit="${h.id}">${done?"Снять":"Готово"}</button><button class="btn btn-danger" data-delete-habit="${h.id}" style="font-size:11px;min-height:28px;padding:0 8px;">Удалить</button></div>
           </div>`;
         }).join("")}
       </div></section>
     </div>
     <div class="grid">
-      <div class="habit-score-bar"><div><div class="score">${ws}%</div><div class="label">Weekly Score</div></div><div class="progress-bar" style="flex:1;margin-top:0;height:12px;"><span style="width:${ws}%"></span></div></div>
+      <div class="habit-score-bar"><div><div class="score">${ws}%</div><div class="label">Оценка недели</div></div><div class="progress-bar" style="flex:1;margin-top:0;height:12px;"><span style="width:${ws}%"></span></div></div>
     </div></div>`);
 }
 
@@ -1048,12 +1178,12 @@ function rewardsScreen() {
 }
 
 function statsScreen() {
-  return shell("Stats & Spheres","Manage your life domains and character attributes.",`
+  return shell("Статы и сферы","Управляй жизненными сферами и характеристиками персонажа. Клик по карточке даёт быстрые +10 XP.",`
     <div class="split">
-      <section class="panel"><div class="panel-header"><h3 class="panel-title">Add Sphere</h3></div><div class="panel-inner"><form class="inline-form" data-form="sphere"><input class="input" name="name" placeholder="Music, Sleep, Business" required><button class="btn btn-primary" type="submit">${I.plus} Add</button></form></div></section>
-      <section class="panel"><div class="panel-header"><h3 class="panel-title">Spheres</h3><span class="tag">${S.spheres.length}</span></div><div class="panel-inner mini-grid">${S.spheres.map(s => `<div class="builder-item">${sphereCard(s)}<button class="btn btn-danger" data-delete-sphere="${s.id}">Delete ${esc(s.name)}</button></div>`).join("")||emptyState("Add your first sphere.")}</div></section>
-      <section class="panel"><div class="panel-header"><h3 class="panel-title">Add Stat</h3></div><div class="panel-inner"><form class="inline-form" data-form="stat"><input class="input" name="name" placeholder="Leadership, Stage Presence" required><button class="btn btn-primary" type="submit">${I.plus} Add</button></form></div></section>
-      <section class="panel"><div class="panel-header"><h3 class="panel-title">Stats</h3><span class="tag">${S.stats.length}</span></div><div class="panel-inner mini-grid">${S.stats.map(s => `<div class="builder-item">${statCard(s)}<button class="btn btn-danger" data-delete-stat="${s.id}">Delete ${esc(s.name)}</button></div>`).join("")||emptyState("Add your first stat.")}</div></section>
+      <section class="panel"><div class="panel-header"><h3 class="panel-title">Добавить сферу</h3></div><div class="panel-inner"><form class="inline-form" data-form="sphere"><input class="input" name="name" placeholder="Музыка, сон, бизнес" required><button class="btn btn-primary" type="submit">${I.plus} Добавить</button></form></div></section>
+      <section class="panel"><div class="panel-header"><h3 class="panel-title">Сферы жизни</h3><span class="tag">${S.spheres.length}</span></div><div class="panel-inner mini-grid">${S.spheres.map(s => `<div class="builder-item">${sphereCard(s)}<button class="btn btn-danger" data-delete-sphere="${s.id}">Удалить ${esc(s.name)}</button></div>`).join("")||emptyState("Добавь первую сферу.")}</div></section>
+      <section class="panel"><div class="panel-header"><h3 class="panel-title">Добавить стат</h3></div><div class="panel-inner"><form class="inline-form" data-form="stat"><input class="input" name="name" placeholder="Лидерство, сцена, вкус" required><button class="btn btn-primary" type="submit">${I.plus} Добавить</button></form></div></section>
+      <section class="panel"><div class="panel-header"><h3 class="panel-title">Характеристики</h3><span class="tag">${S.stats.length}</span></div><div class="panel-inner mini-grid">${S.stats.map(s => `<div class="builder-item">${statCard(s)}<button class="btn btn-danger" data-delete-stat="${s.id}">Удалить ${esc(s.name)}</button></div>`).join("")||emptyState("Добавь первый стат.")}</div></section>
     </div>`);
 }
 
@@ -1088,8 +1218,9 @@ function settingsScreen() {
   return shell("Настройки","Внешний вид, данные, звук и системные действия.",`
     <div class="grid">
       <section class="panel"><div class="panel-header"><h3 class="panel-title">Внешний вид</h3><span class="tag tag-accent">${BACKGROUND_PRESETS[a.bgPreset]?.label||"Свой фон"}</span></div><div class="panel-inner control-grid">
-        <div><h4>Фон</h4><p class="muted">Выбери сцену или загрузи своё изображение.</p><div class="preset-row">${Object.entries(BACKGROUND_PRESETS).map(([k,p]) => `<button class="theme-card ${a.bgPreset===k&&!a.customBg?"active":""}" data-bg-preset="${k}"><strong>${p.label}</strong></button>`).join("")}</div><label class="btn file-btn">Загрузить<input type="file" accept="image/*" data-background-file></label></div>
-        <div><h4>Формат экрана</h4><p class="muted">Затемнение и плотность интерфейса.</p><label class="field"><span class="label">Затемнение фона</span><input class="input" type="range" min="35" max="92" value="${a.bgDim}" data-background-dim></label><label class="field"><span class="label">Плотность</span><select class="select" data-density><option value="compact" ${a.density==="compact"?"selected":""}>Компактно</option><option value="comfortable" ${a.density==="comfortable"?"selected":""}>Свободно</option></select></label><button class="btn" data-action="reset-appearance">Сбросить</button></div>
+        <div><h4>Фон мира</h4><p class="muted">${esc(a.customBgName || "Выбери сцену или загрузи своё изображение до 50 MB.")}</p><div class="preset-row">${Object.entries(BACKGROUND_PRESETS).map(([k,p]) => `<button class="theme-card ${a.bgPreset===k&&!a.customBgKey&&!a.customBg?"active":""}" data-bg-preset="${k}"><strong>${p.label}</strong></button>`).join("")}</div><label class="btn file-btn">Загрузить фон<input type="file" accept="image/*" data-background-file></label></div>
+        <div><h4>Персонаж</h4><p class="muted">${esc(S.hero.customCharacterName || "Загрузи свою картинку героя до 50 MB.")}</p><div class="hero-avatar xl">${heroAvatarContent()}</div><label class="btn file-btn">Загрузить героя<input type="file" accept="image/*" data-character-file></label></div>
+        <div><h4>Формат экрана</h4><p class="muted">Затемнение и плотность интерфейса.</p><label class="field"><span class="label">Затемнение фона</span><input class="input" type="range" min="15" max="92" value="${a.bgDim}" data-background-dim></label><label class="field"><span class="label">Плотность</span><select class="select" data-density><option value="compact" ${a.density==="compact"?"selected":""}>Компактно</option><option value="comfortable" ${a.density==="comfortable"?"selected":""}>Свободно</option></select></label><button class="btn" data-action="reset-appearance">Сбросить</button></div>
       </div></section>
       <div class="split">
         <section class="panel"><div class="panel-header"><h3 class="panel-title">Звук и тема</h3></div><div class="panel-inner" style="display:grid;gap:14px;">
@@ -1151,9 +1282,6 @@ function generateDaily() {
 
 // ─── Event Handlers ───────────────────────────────────────────────────
 document.addEventListener("click", e => {
-  const sb = e.target.closest('button[type="submit"]');
-  if (sb?.form?.dataset.form) { e.preventDefault(); handleForm(sb.form); return; }
-
   const route = e.target.closest("[data-route]")?.dataset.route;
   if (route && S.onboardingComplete) setRoute(route);
 
@@ -1167,26 +1295,25 @@ document.addEventListener("click", e => {
   if (archetype) { S.hero.archetype=archetype; save(); render(); }
 
   const bgPreset = e.target.closest("[data-bg-preset]")?.dataset.bgPreset;
-  if (bgPreset) { S.appearance.bgPreset=bgPreset; S.appearance.customBg=""; applyTheme(); save(); render(); }
+  if (bgPreset) { S.appearance.bgPreset=bgPreset; S.appearance.customBg=""; S.appearance.customBgKey=""; S.appearance.customBgName=""; setAssetUrl("background", null); applyTheme(); save(); render(); }
 
-  const toggleSphere = e.target.closest("[data-toggle-sphere]")?.dataset.toggleSphere;
-  if (toggleSphere) toggleSphere(toggleSphere);
+  const sphereChoice = e.target.closest("[data-toggle-sphere]")?.dataset.toggleSphere;
+  if (sphereChoice) toggleSphere(sphereChoice);
 
-  const toggleStat = e.target.closest("[data-toggle-stat]")?.dataset.toggleStat;
-  if (toggleStat) toggleStat(toggleStat);
+  const statChoice = e.target.closest("[data-toggle-stat]")?.dataset.toggleStat;
+  if (statChoice) toggleStat(statChoice);
 
   const action = e.target.closest("[data-action]")?.dataset.action;
-  if (action==="setup-next") { if (S.setupStep>=5) finishSetup(false); else { S.setupStep++; save(); render(); } }
-  if (action==="setup-prev") { S.setupStep=Math.max(0,S.setupStep-1); save(); render(); }
+  if (action==="setup-next" || action==="setup-prev" || action==="setup-finish") return;
   if (action==="skip-setup"||action==="setup-finish") finishSetup(false);
-  if (action==="import-template") { importTemplate(); save(); render(); }
+  if (action==="import-template") { importTemplate(S.hero.archetype); save(); render(); }
   if (action==="export-progress") { exportProgress(); render(); }
-  if (action==="reset-appearance") { S.appearance=structuredClone(EMPTY.appearance); applyTheme(); save(); render(); }
+  if (action==="reset-appearance") { S.appearance=structuredClone(EMPTY.appearance); setAssetUrl("background", null); applyTheme(); save(); render(); }
   if (action==="close-detail") { S.activeDetail=null; save(); render(); }
   if (action==="transform") transformHero();
   if (action==="hard-reset") hardReset();
   if (action==="check-in") checkIn();
-  if (action==="toggle-sound") { S.soundEnabled=!S.soundEnabled; save(); render(); toast(S.soundEnabled?"Звук включён":"Звук выключен"); }
+  if (action==="toggle-sound") { S.soundEnabled=!S.soundEnabled; if (S.soundEnabled) playSound("checkin"); save(); render(); toast(S.soundEnabled?"Звук включён":"Звук выключен"); }
   if (action==="toggle-dark") { S.darkMode=!S.darkMode; applyTheme(); save(); render(); }
   if (action==="prestige") prestigeUp();
 
@@ -1197,16 +1324,20 @@ document.addEventListener("click", e => {
 
   const complete = e.target.closest("[data-complete]")?.dataset.complete;
   if (complete) completeQuest(complete);
-  const completeBoss = e.target.closest("[data-complete-boss]")?.dataset.completeBoss;
-  if (completeBoss) completeBoss(completeBoss);
+  const bossCompleteId = e.target.closest("[data-complete-boss]")?.dataset.completeBoss;
+  if (bossCompleteId) completeBoss(bossCompleteId);
   const redeem = e.target.closest("[data-redeem]")?.dataset.redeem;
   if (redeem) redeemReward(redeem);
   const dq = e.target.closest("[data-delete-quest]")?.dataset.deleteQuest;
   if (dq) deleteQuest(dq);
   const ds = e.target.closest("[data-delete-sphere]")?.dataset.deleteSphere;
-  if (ds) { const sp=S.spheres.find(s=>s.id===ds); if(sp&&(S.quests.some(q=>q.sphere===sp.name)||S.bossFights.some(b=>b.sphere===sp.name))){toast("Sphere in use.");return;} if(!confirm("Delete sphere?"))return; S.spheres=S.spheres.filter(s=>s.id!==ds); save(); render(); }
+  if (ds) { const sp=S.spheres.find(s=>s.id===ds); if(sp&&(S.quests.some(q=>q.sphere===sp.name)||S.bossFights.some(b=>b.sphere===sp.name))){toast("Сфера используется в квестах.");return;} if(!confirm("Удалить сферу?"))return; S.spheres=S.spheres.filter(s=>s.id!==ds); save(); render(); }
   const dst = e.target.closest("[data-delete-stat]")?.dataset.deleteStat;
-  if (dst) { const st=S.stats.find(s=>s.id===dst); if(st&&S.quests.some(q=>q.stats.includes(st.name))){toast("Stat in use.");return;} if(!confirm("Delete stat?"))return; S.stats=S.stats.filter(s=>s.id!==dst); save(); render(); }
+  if (dst) { const st=S.stats.find(s=>s.id===dst); if(st&&S.quests.some(q=>q.stats.includes(st.name))){toast("Стат используется в квестах.");return;} if(!confirm("Удалить стат?"))return; S.stats=S.stats.filter(s=>s.id!==dst); save(); render(); }
+  const trainSphereId = e.target.closest("[data-train-sphere]")?.dataset.trainSphere;
+  if (trainSphereId && !e.target.closest("button,input,select,textarea,label,a")) trainSphere(trainSphereId);
+  const trainStatId = e.target.closest("[data-train-stat]")?.dataset.trainStat;
+  if (trainStatId && !e.target.closest("button,input,select,textarea,label,a")) trainStat(trainStatId);
   const hc = e.target.closest("[data-complete-habit]")?.dataset.completeHabit;
   if (hc) completeHabit(hc);
   const hd = e.target.closest("[data-delete-habit]")?.dataset.deleteHabit;
@@ -1215,15 +1346,44 @@ document.addEventListener("click", e => {
   if (us) unlockSkill(us);
 });
 
+document.addEventListener("pointerdown", e => {
+  const submitButton = e.target.closest('button[type="submit"]');
+  if (submitButton?.form?.dataset.form) {
+    e.preventDefault();
+    handleForm(submitButton.form);
+    return;
+  }
+  const action = e.target.closest("[data-action]")?.dataset.action;
+  if (action !== "setup-next" && action !== "setup-prev" && action !== "setup-finish") return;
+  e.preventDefault();
+  captureSetupStep();
+  if (action === "setup-prev") S.setupStep = Math.max(0, S.setupStep - 1);
+  if (action === "setup-next") S.setupStep >= 5 ? finishSetup(false) : S.setupStep++;
+  if (action === "setup-finish") finishSetup(false);
+  save(); render();
+});
+
 document.addEventListener("change", e => {
   const fi = e.target.closest("[data-import-file]");
   if (fi?.files?.[0]) { importFile(fi.files[0]); fi.value=""; return; }
   const bi = e.target.closest("[data-background-file]");
   if (bi?.files?.[0]) { importBgFile(bi.files[0]); bi.value=""; return; }
+  const ci = e.target.closest("[data-character-file]");
+  if (ci?.files?.[0]) { importCharacterFile(ci.files[0]); ci.value=""; return; }
   const dim = e.target.closest("[data-background-dim]");
   if (dim) { S.appearance.bgDim=Number(dim.value); applyTheme(); save(); return; }
   const den = e.target.closest("[data-density]");
   if (den) { S.appearance.density=den.value; applyTheme(); save(); render(); }
+});
+
+document.addEventListener("input", e => {
+  const identity = e.target.closest('[data-form="identity"]');
+  if (!identity) return;
+  const field = e.target.getAttribute("name");
+  if (field === "name") S.hero.name = e.target.value.trim();
+  if (field === "codename") S.hero.codename = e.target.value.trim();
+  if (field === "mission") S.hero.mission = e.target.value.trim();
+  save();
 });
 
 document.addEventListener("keydown", e => {
@@ -1240,19 +1400,21 @@ document.addEventListener("submit", e => { e.preventDefault(); handleForm(e.targ
 function handleForm(form) {
   if (!(form instanceof HTMLFormElement)||!form.checkValidity()) { form.reportValidity?.(); return; }
   const d = new FormData(form);
-  if (form.matches('[data-form="quick-sphere"],[data-form="sphere"]')) { const n=d.get("name")?.trim(); if(n&&!byName(S.spheres,n)) S.spheres.push({id:uid(),name:n,level:1,xp:0,active:true}); toast("Сфера добавлена."); }
-  if (form.matches('[data-form="quick-stat"],[data-form="stat"]')) { const n=d.get("name")?.trim(); if(n&&!byName(S.stats,n)) S.stats.push({id:uid(),name:n,level:1,xp:0,active:true}); toast("Стат добавлен."); }
-  if (form.matches('[data-form="quest"]')) { createQuest(d); toast("Квест создан."); }
-  if (form.matches('[data-form="reward"]')) { createReward(d); toast("Награда создана."); }
+  const fieldValue = name => (d.get(name)?.trim?.() || form.querySelector(`[name="${name}"]`)?.value?.trim?.() || "");
+  if (form.matches('[data-form="quick-sphere"],[data-form="sphere"]')) { const n=fieldValue("name"); if(n&&!byName(S.spheres,n)) S.spheres.push({id:uid(),name:n,level:1,xp:0,active:true}); toast("Сфера добавлена."); }
+  if (form.matches('[data-form="quick-stat"],[data-form="stat"]')) { const n=fieldValue("name"); if(n&&!byName(S.stats,n)) S.stats.push({id:uid(),name:n,level:1,xp:0,active:true}); toast("Стат добавлен."); }
+  if (form.matches('[data-form="quest"]')) { createQuest(d, form); toast("Квест создан."); }
+  if (form.matches('[data-form="reward"]')) { createReward(d, form); toast("Награда создана."); }
   if (form.matches('[data-form="hero-edit"]')) {
     S.hero.name=d.get("name")?.trim()||S.hero.name; S.hero.codename=d.get("codename")?.trim()||"";
     S.hero.season=d.get("season")?.trim()||S.hero.season; S.hero.archetype=d.get("archetype")||S.hero.archetype;
     S.hero.mission=d.get("mission")?.trim()||""; S.hero.motto=d.get("motto")?.trim()||""; toast("Герой сохранён.");
   }
-  if (form.matches('[data-form="habit"]')) { createHabit(d); toast("Привычка создана."); }
+  if (form.matches('[data-form="habit"]')) { createHabit(d, form); toast("Привычка создана."); }
   form.reset(); save(); render();
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────
 checkComeback();
 render();
+restoreAssets();
