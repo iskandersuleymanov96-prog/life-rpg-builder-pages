@@ -19,9 +19,10 @@ Dark premium MVP for a personal life-RPG system. Create a hero, customize the wo
 - **Theme System** — 5 color themes (Frost, Gold, Crimson, Violet, Steel)
 - **Dark/Light Mode** — Toggle between themes
 - **Appearance Studio** — Background presets, custom images up to 50 MB, character images up to 50 MB, dim control
+- **Social Layer** — Public profile preview, share link, guilds, multiplayer raids, and Telegram bot settings
 - **Import/Export** — JSON backup and restore
 - **Responsive** — Works on desktop, tablet, and mobile
-- **Version** — `2.3.0`
+- **Version** — `2.4.0`
 
 ## Local Run
 
@@ -68,6 +69,7 @@ Optional backend schema in `supabase/migrations/001_initial_schema.sql`:
 - Row Level Security on all tables
 - Event-ledger accounting for XP and coins
 - Custom domains, stats, quests, challenges, rewards, achievements
+- Public profiles, guilds, raid participants, Telegram settings
 - Templates, seasons, and weekly reviews
 
 ## License

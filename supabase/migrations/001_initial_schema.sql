@@ -406,3 +406,110 @@ create policy "Users manage own weekly reviews"
   on public.weekly_reviews for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
+
+-- Social launch layer.
+create table public.public_profiles (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  slug text not null unique,
+  display_name text not null,
+  headline text,
+  avatar_url text,
+  public_enabled boolean not null default true,
+  stats_snapshot jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+create table public.guilds (
+  id uuid primary key default gen_random_uuid(),
+  owner_user_id uuid references auth.users(id) on delete set null,
+  name text not null,
+  focus text,
+  motto text,
+  visibility text not null default 'public',
+  member_count integer not null default 0 check (member_count >= 0),
+  created_at timestamptz not null default now()
+);
+
+create table public.guild_members (
+  guild_id uuid not null references public.guilds(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  role text not null default 'member',
+  joined_at timestamptz not null default now(),
+  primary key (guild_id, user_id)
+);
+
+create table public.raids (
+  id uuid primary key default gen_random_uuid(),
+  guild_id uuid references public.guilds(id) on delete set null,
+  title text not null,
+  description text,
+  duration_days integer not null check (duration_days > 0),
+  reward_xp integer not null default 0 check (reward_xp >= 0),
+  reward_coins integer not null default 0 check (reward_coins >= 0),
+  status text not null default 'open',
+  starts_on date,
+  ends_on date,
+  created_at timestamptz not null default now()
+);
+
+create table public.raid_participants (
+  raid_id uuid not null references public.raids(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  progress_days integer not null default 0 check (progress_days >= 0),
+  joined_at timestamptz not null default now(),
+  last_checkin_at timestamptz,
+  primary key (raid_id, user_id)
+);
+
+create table public.telegram_settings (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  telegram_handle text,
+  chat_id text,
+  reminders_enabled boolean not null default false,
+  daily_report_time text not null default '21:00',
+  updated_at timestamptz not null default now()
+);
+
+alter table public.public_profiles enable row level security;
+alter table public.guilds enable row level security;
+alter table public.guild_members enable row level security;
+alter table public.raids enable row level security;
+alter table public.raid_participants enable row level security;
+alter table public.telegram_settings enable row level security;
+
+create policy "Public profiles are readable when enabled"
+  on public.public_profiles for select
+  using (public_enabled);
+
+create policy "Users manage own public profile"
+  on public.public_profiles for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "Public guilds are readable"
+  on public.guilds for select
+  using (visibility = 'public');
+
+create policy "Guild owners manage guilds"
+  on public.guilds for all
+  using (auth.uid() = owner_user_id)
+  with check (auth.uid() = owner_user_id);
+
+create policy "Users manage own guild membership"
+  on public.guild_members for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "Open raids are readable"
+  on public.raids for select
+  using (status in ('open', 'active', 'completed'));
+
+create policy "Users manage own raid participation"
+  on public.raid_participants for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "Users manage own Telegram settings"
+  on public.telegram_settings for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);

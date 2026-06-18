@@ -1,5 +1,5 @@
-// RPG Life v2.3 — Production Build
-const VERSION = "2.3.0";
+// RPG Life v2.4 — Production Build
+const VERSION = "2.4.0";
 const APP_NAME = "Live RPG";
 const STORAGE_KEY = "rpg-life-state-v3";
 const ASSET_DB = "live-rpg-assets";
@@ -161,11 +161,23 @@ const EVOLUTION_STAGES = [
   { name:"Легенда", level:35, desc:"Ты играешь долгими сезонами: создаёшь собственные правила и личную мифологию.", reward:"Легендарный статус и престиж" },
 ];
 
+const GUILD_PRESETS = [
+  { id:"guild-founders", name:"Founders Circle", focus:"Карьера / Деньги", members:128, level:7, motto:"Каждую неделю строим активы.", privacy:"public" },
+  { id:"guild-creators", name:"Creator Forge", focus:"Творчество / Аудитория", members:214, level:9, motto:"Публикуй, улучшай, повторяй.", privacy:"public" },
+  { id:"guild-warriors", name:"Warrior Room", focus:"Тело / Дисциплина", members:176, level:8, motto:"Сначала тело, потом всё остальное.", privacy:"public" },
+];
+
+const RAID_PRESETS = [
+  { id:"raid-30-discipline", title:"30 дней дисциплины", guildId:"guild-warriors", participants:250, days:30, progress:9, xp:1200, coins:360, status:"open", description:"Каждый день один главный квест, check-in и отчёт в конце дня." },
+  { id:"raid-launch-sprint", title:"14 дней запуска", guildId:"guild-founders", participants:84, days:14, progress:4, xp:900, coins:260, status:"open", description:"Оффер, первые касания, публичный артефакт и продажа." },
+  { id:"raid-creator-output", title:"21 день контента", guildId:"guild-creators", participants:132, days:21, progress:6, xp:1000, coins:300, status:"open", description:"Ежедневная творческая практика и публикация через день." },
+];
+
 // ─── State ────────────────────────────────────────────────────────────
 const EMPTY = {
   version: VERSION, route: "setup", setupStep: 0, onboardingComplete: false,
   theme: "ice", darkMode: true, soundEnabled: true,
-  hero: { name:"", codename:"", archetype:"", level:1, xp:0, coins:0, season:"Season 01: Foundation", mission:"", motto:"", evolution:0, visual:"creator", customCharacterKey:"", customCharacterName:"" },
+  hero: { name:"", codename:"", archetype:"", level:1, xp:0, coins:0, season:"Season 01: Foundation", mission:"", motto:"", evolution:0, visual:"creator", customCharacterKey:"", customCharacterName:"", rotation:0 },
   appearance: { bgPreset:"worldwalker", customBg:"", customBgKey:"", customBgName:"", bgDim:48, density:"compact" },
   streak: { current:0, best:0, lastCheckIn:"", totalCheckIns:0 },
   habits: [], skillTree: { unlocked:[] }, prestige: { level:0, totalXP:0, bonus:0 },
@@ -173,6 +185,8 @@ const EMPTY = {
   spheres: [], stats: [], quests: [], bossFights: [], rewards: [],
   completions: [], progressLog: [], completedDaily: {}, rewardGroups: {},
   lootHistory: [], lastLoginDate: "", dailyQuestDate: "",
+  social: { slug:"iskander", publicProfile:true, headline:"Главный герой собственного мира.", guildId:"", telegramHandle:"", telegramReminders:false, dailyReportTime:"21:00" },
+  guilds: [], raids: [], raidProgress: {},
 };
 
 let S = load();
@@ -196,6 +210,7 @@ function sanitize(raw) {
   if (n.route === "hero") n.route = "main";
   n.hero = { ...b.hero, ...(raw?.hero||{}) };
   n.appearance = { ...b.appearance, ...(raw?.appearance||{}) };
+  n.social = { ...b.social, ...(raw?.social||{}) };
   if (!n.appearance.customBgKey && n.appearance.customBg?.startsWith?.("data:")) n.appearance.customBgName ||= "Старый фон";
   n.streak = { ...b.streak, ...(raw?.streak||{}) };
   n.prestige = { ...b.prestige, ...(raw?.prestige||{}) };
@@ -212,6 +227,9 @@ function sanitize(raw) {
   n.rewardGroups   = raw?.rewardGroups   && typeof raw.rewardGroups   === "object" ? raw.rewardGroups   : {};
   n.lootHistory    = Array.isArray(raw?.lootHistory)    ? raw.lootHistory    : [];
   n.habits         = Array.isArray(raw?.habits)         ? raw.habits         : [];
+  n.guilds         = Array.isArray(raw?.guilds)         ? raw.guilds         : [];
+  n.raids          = Array.isArray(raw?.raids)          ? raw.raids          : [];
+  n.raidProgress   = raw?.raidProgress && typeof raw.raidProgress === "object" ? raw.raidProgress : {};
   n.lastLoginDate  = raw?.lastLoginDate  || "";
   n.dailyQuestDate = raw?.dailyQuestDate || "";
   return finalize(n, false);
@@ -287,6 +305,10 @@ function evoName()    { return (EVOLUTION_STAGES[S.hero.evolution]||EVOLUTION_ST
 function todayIds()   { return S.completedDaily[dateKey()] || []; }
 function todayXp()    { const d=dateKey(); return S.progressLog.filter(e => e.timestamp?.slice(0,10)===d && e.type==="quest").reduce((s,e) => s+Number(e.xp||0),0); }
 function weeklyXp()   { const c=Date.now()-7*864e5; return S.progressLog.filter(e => new Date(e.timestamp).getTime()>=c).reduce((s,e) => s+Number(e.xp||0),0); }
+function publicSlug() { return (S.social?.slug || S.hero.codename || S.hero.name || "hero").toLowerCase().trim().replace(/[^a-z0-9а-яё_-]+/gi,"-").replace(/^-+|-+$/g,"") || "hero"; }
+function publicUrl()  { return `${location.origin}${location.pathname}?profile=${encodeURIComponent(publicSlug())}`; }
+function guildName(id){ return S.guilds.find(g => g.id === id)?.name || "Без гильдии"; }
+function raidDone(id) { return S.raidProgress?.[id]?.days?.includes(dateKey()) || false; }
 
 function maybeLevel(e) {
   let up = false;
@@ -298,7 +320,13 @@ function logProgress(entry) {
   S.progressLog.unshift({ id:uid(), timestamp:new Date().toISOString(), title:entry.title, type:entry.type||"quest", xp:Number(entry.xp||0), coins:Number(entry.coins||0), sphere:entry.sphere||"", stats:entry.stats||[], comment:entry.comment||"" });
 }
 
+async function copyText(text, label="Скопировано.") {
+  try { await navigator.clipboard.writeText(text); toast(label); }
+  catch { prompt("Скопируй вручную:", text); }
+}
+
 function finalize(next=S, show=true) {
+  ensureSocialData(next);
   ACHIEVEMENTS.forEach(a => {
     if (next.unlockedAchievements?.includes(a.id)) return;
     if (!a.test(next)) return;
@@ -307,6 +335,14 @@ function finalize(next=S, show=true) {
     next.progressLog.unshift({ id:uid(), timestamp:new Date().toISOString(), title:a.title, type:"achievement", xp:0, coins:0, sphere:a.cat, comment:a.cond });
     if (show) { toast(`Достижение: ${a.title}`); playSound("achievement"); }
   });
+  return next;
+}
+
+function ensureSocialData(next=S) {
+  if (!next.guilds?.length) next.guilds = structuredClone(GUILD_PRESETS);
+  if (!next.raids?.length) next.raids = structuredClone(RAID_PRESETS);
+  next.social = { ...EMPTY.social, ...(next.social||{}) };
+  if (!next.raidProgress || typeof next.raidProgress !== "object") next.raidProgress = {};
   return next;
 }
 
@@ -618,6 +654,54 @@ function redeemReward(id) {
   finalize(S, false); save(); playSound("reward"); toast(`Награда: ${r.title}`); render();
 }
 
+function joinGuild(id) {
+  const guild = S.guilds.find(g => g.id === id);
+  if (!guild) return;
+  S.social.guildId = id;
+  logProgress({ title:`Гильдия: ${guild.name}`, type:"guild", xp:20, coins:0, sphere:guild.focus, comment:"Вступление в гильдию." });
+  S.hero.xp += 20; maybeLevel(S.hero);
+  save(); playSound("achievement"); toast(`Ты вступил в ${guild.name}`); render();
+}
+
+function joinRaid(id) {
+  const raid = S.raids.find(r => r.id === id);
+  if (!raid) return;
+  if (!S.raidProgress[id]) S.raidProgress[id] = { joinedAt:new Date().toISOString(), days:[] };
+  raid.status = "joined";
+  save(); toast(`Рейд добавлен: ${raid.title}`); render();
+}
+
+function checkRaidDay(id) {
+  const raid = S.raids.find(r => r.id === id);
+  if (!raid) return;
+  if (!S.raidProgress[id]) S.raidProgress[id] = { joinedAt:new Date().toISOString(), days:[] };
+  const days = S.raidProgress[id].days;
+  const today = dateKey();
+  if (days.includes(today)) { toast("Сегодня уже отмечено."); return; }
+  days.push(today);
+  raid.progress = Math.min(raid.days, Number(raid.progress||0)+1);
+  const xp = Math.round(raid.xp / raid.days);
+  const coins = Math.round(raid.coins / raid.days);
+  S.hero.xp += xp; S.hero.coins += coins; maybeLevel(S.hero);
+  logProgress({ title:`Рейд: ${raid.title}`, type:"raid", xp, coins, sphere:guildName(raid.guildId), comment:`День ${raid.progress}/${raid.days}` });
+  finalize(S); save(); playSound("quest"); toast(`Рейд: +${xp} XP, +${coins} монет`); render();
+}
+
+function exportShareCard() {
+  const lines = [
+    `${APP_NAME} / ${S.hero.name || "Новый герой"}`,
+    `Level ${S.hero.level} / ${evoName()}`,
+    `XP ${S.hero.xp}/${xpFor(S.hero.level)} / ${S.hero.coins} монет`,
+    `Гильдия: ${guildName(S.social.guildId)}`,
+    publicUrl(),
+  ];
+  const blob = new Blob([lines.join("\n")], { type:"text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = `live-rpg-card-${publicSlug()}.txt`;
+  document.body.append(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  toast("Карточка героя экспортирована.");
+}
+
 // ─── Transform / Prestige ─────────────────────────────────────────────
 function transformHero() {
   const next = Math.min(EVOLUTION_STAGES.length-1, S.hero.evolution+1);
@@ -906,7 +990,7 @@ function shell(title, subtitle, content, actions="") {
 }
 
 function sidebar() {
-  const primary = [["main","Main",I.hero],["dashboard","Сегодня",I.dash],["quests","Квесты",I.quest],["progress","Прогресс",I.log],["rewards","Награды",I.badge],["settings","Настройки",I.setting]];
+  const primary = [["main","Main",I.hero],["dashboard","Сегодня",I.dash],["quests","Квесты",I.quest],["progress","Прогресс",I.log],["rewards","Награды",I.badge],["social","Социал",I.tree],["settings","Настройки",I.setting]];
   const secondary = [["habits","Привычки",I.habit],["trials","Испытания",I.boss],["badges","Достижения",I.badge],["evolution","Эволюция",I.tree],["stats","Статы",I.stat],["log","Журнал",I.log]];
   const navBtn = ([route,label,icon], compact=false) => `<button class="nav-btn ${compact?"nav-compact":""} ${S.route===route?"active":""}" data-route="${route}" title="${esc(label)}" ${!S.onboardingComplete?"disabled":""}><span class="nav-icon">${icon}</span><span>${label}</span></button>`;
   return `
@@ -954,10 +1038,10 @@ function mainScreen() {
             <label class="icon-btn scene-upload" title="Загрузить своего персонажа">${I.hero}<input type="file" accept="image/*" data-character-file></label>
           </div>
           <div class="stage-ring"></div><div class="stage-floor"></div>
-          <div class="fullbody-character ${characterClass}" style="--hero-position:${position}"><img src="${characterSrc}" alt="${esc(S.hero.name || "Персонаж")}"></div>
+          <div class="fullbody-character ${characterClass}" data-character-rotate style="--hero-position:${position}; --manual-rotate:${Number(S.hero.rotation||0)}deg"><img src="${characterSrc}" alt="${esc(S.hero.name || "Персонаж")}"></div>
         </div>
         <div class="panel-inner main-caption">
-          <div><h3>${esc(S.hero.name || "Новый герой")}</h3><p>${esc(S.hero.mission || "Добавь миссию героя, чтобы Main стал твоей личной RPG-сценой.")}</p><small class="asset-hint">${esc(S.hero.customCharacterName || "Можно загрузить своего персонажа до 50 MB.")}</small></div>
+          <div><h3>${esc(S.hero.name || "Новый герой")}</h3><p>${esc(S.hero.mission || "Добавь миссию героя, чтобы Main стал твоей личной RPG-сценой.")}</p><small class="asset-hint">${esc(S.hero.customCharacterName || "Можно загрузить своего персонажа до 50 MB. Перетащи персонажа мышкой, чтобы повернуть.")}</small></div>
           <div class="actions"><label class="btn file-btn">Сменить персонажа<input type="file" accept="image/*" data-character-file></label><label class="btn file-btn">Сменить фон<input type="file" accept="image/*" data-background-file></label></div>
         </div>
       </section>
@@ -1177,6 +1261,65 @@ function rewardsScreen() {
     </div>`);
 }
 
+function guildCard(g) {
+  const active = S.social.guildId === g.id;
+  return `<article class="guild-card ${active?"active":""}">
+    <div><h4>${esc(g.name)}</h4><p>${esc(g.motto)}</p><div class="tags"><span class="tag">${esc(g.focus)}</span><span class="tag">${g.members} участников</span><span class="tag">Lv ${g.level}</span></div></div>
+    <button class="btn ${active?"":"btn-primary"}" data-join-guild="${g.id}">${active?"Моя гильдия":"Вступить"}</button>
+  </article>`;
+}
+
+function raidCard(r) {
+  const joined = r.status === "joined" || !!S.raidProgress[r.id];
+  const pct = Math.min(100, Math.round((Number(r.progress||0) / r.days) * 100));
+  const done = raidDone(r.id);
+  return `<article class="raid-card ${joined?"joined":""}">
+    <div class="raid-head"><div><h4>${esc(r.title)}</h4><p>${esc(r.description)}</p></div><span class="tag tag-accent">${r.participants} игроков</span></div>
+    <div class="progress-bar"><span style="width:${pct}%"></span></div>
+    <div class="raid-meta"><span>${esc(guildName(r.guildId))}</span><span>${r.progress}/${r.days} дней</span><span>+${r.xp} XP / +${r.coins} монет</span></div>
+    <div class="actions">${joined?`<button class="btn ${done?"":"btn-primary"}" data-raid-check="${r.id}" ${done?"disabled":""}>${done?"Сегодня готово":"Отметить день"}</button>`:`<button class="btn btn-primary" data-join-raid="${r.id}">Участвовать</button>`}</div>
+  </article>`;
+}
+
+function socialScreen() {
+  const guild = S.guilds.find(g => g.id === S.social.guildId);
+  return shell("Социальный слой", "Публичный профиль, гильдии, групповые рейды и подготовка к Telegram-боту.", `
+    <div class="grid">
+      <section class="panel"><div class="panel-header"><div><h3 class="panel-title">Публичный профиль</h3><p class="panel-note">Локальный preview будущей публичной страницы героя.</p></div><span class="tag tag-accent">${S.social.publicProfile?"Открыт":"Закрыт"}</span></div>
+        <div class="panel-inner social-profile">
+          <div class="share-card-preview">
+            <div class="hero-avatar xl">${heroAvatarContent()}</div>
+            <div><strong>${esc(S.hero.name || "Новый герой")}</strong><p>${esc(S.social.headline || S.hero.mission || "Главный герой собственного мира.")}</p><div class="tags"><span class="tag">Lv ${S.hero.level}</span><span class="tag">${esc(evoName())}</span><span class="tag">${esc(guild?.name || "Без гильдии")}</span></div></div>
+          </div>
+          <form class="form-grid" data-form="social-profile">
+            <label class="field"><span class="label">Публичный slug</span><input class="input" name="slug" value="${esc(publicSlug())}" placeholder="iskander"></label>
+            <label class="field full"><span class="label">Описание профиля</span><input class="input" name="headline" value="${esc(S.social.headline)}" placeholder="Founder / Creator / Warrior"></label>
+            <button class="btn btn-primary" type="submit">Сохранить профиль</button>
+          </form>
+          <div class="share-url"><code>${esc(publicUrl())}</code><button class="btn" data-action="copy-public-url">Скопировать ссылку</button><button class="btn" data-action="export-share-card">Карточка для соцсетей</button></div>
+        </div>
+      </section>
+      <div class="split">
+        <section class="panel"><div class="panel-header"><h3 class="panel-title">Telegram-бот</h3><span class="tag">готово к backend</span></div><div class="panel-inner">
+          <form class="form-grid" data-form="telegram">
+            <label class="field"><span class="label">Telegram username</span><input class="input" name="telegramHandle" value="${esc(S.social.telegramHandle)}" placeholder="@username"></label>
+            <label class="field"><span class="label">Время отчёта</span><input class="input" name="dailyReportTime" value="${esc(S.social.dailyReportTime)}" placeholder="21:00"></label>
+            <button class="btn btn-primary" type="submit">Сохранить Telegram</button>
+          </form>
+          <div class="telegram-actions"><button class="btn ${S.social.telegramReminders?"btn-primary":""}" data-action="toggle-telegram">${S.social.telegramReminders?"Напоминания включены":"Включить напоминания"}</button><button class="btn" data-action="telegram-prompt">Скопировать prompt бота</button></div>
+        </div></section>
+        <section class="panel"><div class="panel-header"><h3 class="panel-title">Статус запуска</h3></div><div class="panel-inner mini-grid">
+          <div class="metric"><strong>${S.guilds.length}</strong><span>Гильдии</span></div>
+          <div class="metric"><strong>${S.raids.length}</strong><span>Рейды</span></div>
+          <div class="metric"><strong>${S.progressLog.filter(e=>e.type==="raid").length}</strong><span>Рейд-дни</span></div>
+          <div class="metric"><strong>${S.social.telegramReminders?"ON":"OFF"}</strong><span>Telegram</span></div>
+        </div></section>
+      </div>
+      <section class="panel"><div class="panel-header"><h3 class="panel-title">Гильдии</h3><span class="tag">${esc(guild?.name || "выбери гильдию")}</span></div><div class="panel-inner guild-list">${S.guilds.map(guildCard).join("")}</div></section>
+      <section class="panel"><div class="panel-header"><div><h3 class="panel-title">Групповые рейды</h3><p class="panel-note">Командные челленджи для будущего multiplayer-слоя.</p></div><button class="btn" data-action="seed-raids">Обновить рейды</button></div><div class="panel-inner raid-list">${S.raids.map(raidCard).join("")}</div></section>
+    </div>`);
+}
+
 function statsScreen() {
   return shell("Статы и сферы","Управляй жизненными сферами и характеристиками персонажа. Клик по карточке даёт быстрые +10 XP.",`
     <div class="split">
@@ -1246,8 +1389,9 @@ function settingsScreen() {
 function render() {
   applyTheme();
   if (!S.onboardingComplete || S.route==="setup") { document.querySelector("#app").innerHTML = setupScreen(); return; }
+  ensureSocialData(S);
   generateDaily();
-  const views = { main:mainScreen, dashboard:dashboardScreen, hero:mainScreen, quests:questsScreen, habits:habitsScreen, progress:progressScreen, rewards:rewardsScreen, settings:settingsScreen, trials:trialsScreen, badges:badgesScreen, evolution:evolutionScreen, stats:statsScreen, log:logScreen };
+  const views = { main:mainScreen, dashboard:dashboardScreen, hero:mainScreen, quests:questsScreen, habits:habitsScreen, progress:progressScreen, rewards:rewardsScreen, social:socialScreen, settings:settingsScreen, trials:trialsScreen, badges:badgesScreen, evolution:evolutionScreen, stats:statsScreen, log:logScreen };
   document.querySelector("#app").innerHTML = (views[S.route]||mainScreen)();
 }
 
@@ -1316,6 +1460,11 @@ document.addEventListener("click", e => {
   if (action==="toggle-sound") { S.soundEnabled=!S.soundEnabled; if (S.soundEnabled) playSound("checkin"); save(); render(); toast(S.soundEnabled?"Звук включён":"Звук выключен"); }
   if (action==="toggle-dark") { S.darkMode=!S.darkMode; applyTheme(); save(); render(); }
   if (action==="prestige") prestigeUp();
+  if (action==="copy-public-url") { copyText(publicUrl(), "Публичная ссылка скопирована."); return; }
+  if (action==="export-share-card") { exportShareCard(); return; }
+  if (action==="toggle-telegram") { S.social.telegramReminders=!S.social.telegramReminders; save(); render(); toast(S.social.telegramReminders?"Telegram-напоминания включены":"Telegram-напоминания выключены"); return; }
+  if (action==="telegram-prompt") { copyText(`Ты Telegram-бот для ${APP_NAME}. Каждый день присылай мои квесты, принимай быстрые отметки привычек и вечером проси отчёт дня. Мой профиль: ${publicUrl()}`, "Prompt Telegram-бота скопирован."); return; }
+  if (action==="seed-raids") { S.guilds=structuredClone(GUILD_PRESETS); S.raids=structuredClone(RAID_PRESETS); save(); render(); toast("Гильдии и рейды обновлены."); return; }
 
   const qd = e.target.closest("[data-open-quest]")?.dataset.openQuest;
   if (qd && !e.target.closest("button,input,select,textarea,label,a")) { S.activeDetail={type:"quest",id:qd}; save(); render(); }
@@ -1344,9 +1493,37 @@ document.addEventListener("click", e => {
   if (hd) deleteHabit(hd);
   const us = e.target.closest("[data-unlock-skill]")?.dataset.unlockSkill;
   if (us) unlockSkill(us);
+  const guildId = e.target.closest("[data-join-guild]")?.dataset.joinGuild;
+  if (guildId) joinGuild(guildId);
+  const raidId = e.target.closest("[data-join-raid]")?.dataset.joinRaid;
+  if (raidId) joinRaid(raidId);
+  const raidCheck = e.target.closest("[data-raid-check]")?.dataset.raidCheck;
+  if (raidCheck) checkRaidDay(raidCheck);
 });
 
 document.addEventListener("pointerdown", e => {
+  const rotator = e.target.closest("[data-character-rotate]");
+  if (rotator) {
+    e.preventDefault();
+    const startX = e.clientX;
+    const start = Number(S.hero.rotation || 0);
+    rotator.setPointerCapture?.(e.pointerId);
+    rotator.dataset.dragging = "true";
+    const move = ev => {
+      const next = Math.max(-180, Math.min(180, start + (ev.clientX - startX) * 0.42));
+      S.hero.rotation = Math.round(next);
+      rotator.style.setProperty("--manual-rotate", `${S.hero.rotation}deg`);
+    };
+    const up = () => {
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
+      rotator.dataset.dragging = "false";
+      save();
+    };
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up, { once:true });
+    return;
+  }
   const submitButton = e.target.closest('button[type="submit"]');
   if (submitButton?.form?.dataset.form) {
     e.preventDefault();
@@ -1405,6 +1582,17 @@ function handleForm(form) {
   if (form.matches('[data-form="quick-stat"],[data-form="stat"]')) { const n=fieldValue("name"); if(n&&!byName(S.stats,n)) S.stats.push({id:uid(),name:n,level:1,xp:0,active:true}); toast("Стат добавлен."); }
   if (form.matches('[data-form="quest"]')) { createQuest(d, form); toast("Квест создан."); }
   if (form.matches('[data-form="reward"]')) { createReward(d, form); toast("Награда создана."); }
+  if (form.matches('[data-form="social-profile"]')) {
+    S.social.slug = fieldValue("slug") || publicSlug();
+    S.social.headline = fieldValue("headline") || S.social.headline;
+    S.social.publicProfile = true;
+    toast("Публичный профиль сохранён.");
+  }
+  if (form.matches('[data-form="telegram"]')) {
+    S.social.telegramHandle = fieldValue("telegramHandle");
+    S.social.dailyReportTime = fieldValue("dailyReportTime") || "21:00";
+    toast("Telegram-настройки сохранены.");
+  }
   if (form.matches('[data-form="hero-edit"]')) {
     S.hero.name=d.get("name")?.trim()||S.hero.name; S.hero.codename=d.get("codename")?.trim()||"";
     S.hero.season=d.get("season")?.trim()||S.hero.season; S.hero.archetype=d.get("archetype")||S.hero.archetype;
