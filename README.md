@@ -20,10 +20,10 @@ Dark premium MVP for a personal life-RPG system. Create a hero, customize the wo
 - **Theme System** — 5 color themes (Frost, Gold, Crimson, Violet, Steel)
 - **Dark/Light Mode** — Toggle between themes
 - **Appearance Studio** — Background presets, custom images up to 50 MB, character images up to 50 MB, dim control
-- **Community Layer** — Public profile preview, invite code, editable guilds, shareable raids, community export, and Telegram bot/backend settings
+- **Community Layer** — Public profile preview, editable guilds, editable raids, simple sharing, and Telegram sending through a server endpoint
 - **Import/Export** — JSON backup and restore
 - **Responsive** — Works on desktop, tablet, and mobile
-- **Version** — `2.6.0`
+- **Version** — `2.7.0`
 
 ## Local Run
 
@@ -73,6 +73,14 @@ Optional backend schema in `supabase/migrations/001_initial_schema.sql`:
 - Public profiles, guilds, raid participants, community invites, Telegram settings, Telegram events
 - Telegram token must live only in backend/serverless env as `TELEGRAM_BOT_TOKEN`; never commit it to the static client
 - Templates, seasons, and weekly reviews
+
+## Telegram
+
+The static app can open Telegram and prepare messages. Real bot sending requires a server endpoint:
+
+- Endpoint: `/api/telegram/send`
+- Env vars: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
+- Optional env var: `LIFE_RPG_WEBHOOK_KEY`
 
 ## License
 

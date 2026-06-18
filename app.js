@@ -1,5 +1,5 @@
-// RPG Life v2.6 — Production Build
-const VERSION = "2.6.0";
+// RPG Life v2.7 — Production Build
+const VERSION = "2.7.0";
 const APP_NAME = "Live RPG";
 const STORAGE_KEY = "rpg-life-state-v3";
 const ASSET_DB = "live-rpg-assets";
@@ -186,7 +186,7 @@ const EMPTY = {
   completions: [], progressLog: [], completedDaily: {}, rewardGroups: {},
   lootHistory: [], lastLoginDate: "", dailyQuestDate: "",
   branding: { appName:"Live RPG", tagline:"Персональный RPG-мир", iconKey:"", iconName:"" },
-  social: { slug:"iskander", publicProfile:true, headline:"Главный герой собственного мира.", guildId:"", telegramHandle:"", telegramReminders:false, dailyReportTime:"21:00", botUsername:"", botWebhook:"", telegramConnected:false, communityCode:"RPG-ISKANDER" },
+  social: { slug:"iskander", publicProfile:true, headline:"Главный герой собственного мира.", guildId:"", telegramHandle:"", telegramReminders:false, dailyReportTime:"21:00", botUsername:"", botWebhook:"", telegramConnected:false, communityCode:"RPG-ISKANDER", editGuildId:"", editRaidId:"" },
   guilds: [], raids: [], raidProgress: {},
   drafts: { quest:{} },
 };
@@ -332,6 +332,26 @@ function logProgress(entry) {
 async function copyText(text, label="Скопировано.") {
   try { await navigator.clipboard.writeText(text); toast(label); }
   catch { prompt("Скопируй вручную:", text); }
+}
+
+async function sendTelegramDigest() {
+  const text = telegramDigest();
+  if (!S.social.botWebhook) {
+    await copyText(text, "Сообщение скопировано. Открой Telegram и отправь его боту.");
+    if (S.social.botUsername) window.open(`https://t.me/${S.social.botUsername.replace(/^@/,"")}`, "_blank", "noopener,noreferrer");
+    return;
+  }
+  try {
+    const res = await fetch(S.social.botWebhook, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ text, profile:publicUrl(), source:"life-rpg" }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    toast("Сообщение отправлено в Telegram.");
+  } catch {
+    await copyText(text, "Сервер Telegram недоступен. Сообщение скопировано.");
+  }
 }
 
 function finalize(next=S, show=true) {
@@ -676,9 +696,8 @@ function joinGuild(id) {
 function createGuild(data, fallbackForm=null) {
   const name = dataValue(data, "name", fallbackForm);
   if (!name) { toast("Добавь название гильдии."); return false; }
-  const id = `guild-${uid()}`;
-  S.guilds.unshift({
-    id,
+  const existingId = data.get("id") || S.social.editGuildId || "";
+  const payload = {
     name,
     focus:dataValue(data, "focus", fallbackForm)||"Своя система",
     members:Number(data.get("members")||1),
@@ -686,9 +705,19 @@ function createGuild(data, fallbackForm=null) {
     motto:dataValue(data, "motto", fallbackForm)||"Собираем людей вокруг роста.",
     privacy:data.get("privacy") || "private",
     owner:true,
-  });
-  if (!S.social.guildId) S.social.guildId = id;
-  logProgress({ title:`Создана гильдия: ${name}`, type:"guild", xp:20, coins:0, sphere:"Сообщество" });
+  };
+  if (existingId) {
+    const g = S.guilds.find(i => i.id === existingId);
+    if (!g) return false;
+    Object.assign(g, payload);
+    S.social.editGuildId = "";
+    logProgress({ title:`Обновлена гильдия: ${name}`, type:"guild", xp:0, coins:0, sphere:"Сообщество" });
+  } else {
+    const id = `guild-${uid()}`;
+    S.guilds.unshift({ id, ...payload });
+    if (!S.social.guildId) S.social.guildId = id;
+    logProgress({ title:`Создана гильдия: ${name}`, type:"guild", xp:20, coins:0, sphere:"Сообщество" });
+  }
   return true;
 }
 
@@ -706,9 +735,8 @@ function createRaid(data, fallbackForm=null) {
   const title = dataValue(data, "title", fallbackForm);
   if (!title) { toast("Добавь название рейда."); return false; }
   const days = Math.max(1, Number(data.get("days")||7));
-  const id = `raid-${uid()}`;
-  S.raids.unshift({
-    id,
+  const existingId = data.get("id") || S.social.editRaidId || "";
+  const payload = {
     title,
     guildId:data.get("guildId") || S.social.guildId || "",
     participants:Number(data.get("participants")||1),
@@ -719,8 +747,18 @@ function createRaid(data, fallbackForm=null) {
     status:"open",
     description:dataValue(data, "description", fallbackForm)||"Командный челлендж с ежедневными отметками.",
     owner:true,
-  });
-  logProgress({ title:`Создан рейд: ${title}`, type:"raid-plan", xp:15, coins:0, sphere:"Сообщество" });
+  };
+  if (existingId) {
+    const r = S.raids.find(i => i.id === existingId);
+    if (!r) return false;
+    Object.assign(r, payload);
+    S.social.editRaidId = "";
+    logProgress({ title:`Обновлён рейд: ${title}`, type:"raid-plan", xp:0, coins:0, sphere:"Сообщество" });
+  } else {
+    const id = `raid-${uid()}`;
+    S.raids.unshift({ id, ...payload });
+    logProgress({ title:`Создан рейд: ${title}`, type:"raid-plan", xp:15, coins:0, sphere:"Сообщество" });
+  }
   return true;
 }
 
@@ -760,45 +798,10 @@ function checkRaidDay(id) {
 function communitySharePayload(kind, id) {
   const item = kind === "guild" ? S.guilds.find(g => g.id === id) : S.raids.find(r => r.id === id);
   if (!item) return "";
-  const payload = kind === "guild"
-    ? {
-        type:"guild_invite",
-        app:brandName(),
-        guild:item.name,
-        focus:item.focus,
-        motto:item.motto,
-        code:S.social.communityCode,
-        profile:publicUrl(),
-      }
-    : {
-        type:"raid_invite",
-        app:brandName(),
-        raid:item.title,
-        guild:guildName(item.guildId),
-        days:item.days,
-        reward:{ xp:item.xp, coins:item.coins },
-        description:item.description,
-        code:S.social.communityCode,
-        profile:publicUrl(),
-      };
-  return JSON.stringify(payload, null, 2);
-}
-
-function exportCommunityPack() {
-  const payload = {
-    app:brandName(),
-    version:VERSION,
-    exportedAt:new Date().toISOString(),
-    profile:{ slug:publicSlug(), url:publicUrl(), headline:S.social.headline, guild:guildName(S.social.guildId) },
-    communityCode:S.social.communityCode,
-    guilds:S.guilds,
-    raids:S.raids,
-  };
-  const blob = new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a"); a.href=url; a.download=`life-rpg-community-${publicSlug()}.json`;
-  document.body.append(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-  toast("Community pack экспортирован.");
+  if (kind === "guild") {
+    return `${brandName()}\nПриглашение в гильдию: ${item.name}\nФокус: ${item.focus}\n${item.motto}\nКод: ${S.social.communityCode}\nПрофиль: ${publicUrl()}`;
+  }
+  return `${brandName()}\nГрупповой рейд: ${item.title}\nГильдия: ${guildName(item.guildId)}\nДлительность: ${item.days} дней\nНаграда: ${item.xp} XP / ${item.coins} монет\n${item.description}\nКод: ${S.social.communityCode}\nПрофиль: ${publicUrl()}`;
 }
 
 function telegramDigest() {
@@ -1434,7 +1437,7 @@ function guildCard(g) {
   const active = S.social.guildId === g.id;
   return `<article class="guild-card ${active?"active":""}">
     <div><h4>${esc(g.name)}</h4><p>${esc(g.motto)}</p><div class="tags"><span class="tag">${esc(g.focus)}</span><span class="tag">${g.members} участников</span><span class="tag">Lv ${g.level}</span><span class="tag">${g.privacy==="private"?"Приватная":"Открытая"}</span></div></div>
-    <div class="card-actions"><button class="btn ${active?"":"btn-primary"}" data-join-guild="${g.id}">${active?"Моя гильдия":"Вступить"}</button><button class="btn" data-share-guild="${g.id}">Share</button>${g.owner?`<button class="icon-btn icon-btn-subtle" title="Удалить гильдию" data-delete-guild="${g.id}">${I.x}</button>`:""}</div>
+    <div class="card-actions"><button class="btn ${active?"":"btn-primary"}" data-join-guild="${g.id}">${active?"Моя гильдия":"Выбрать"}</button><button class="btn" data-edit-guild="${g.id}">Изменить</button><button class="btn" data-share-guild="${g.id}">Поделиться</button>${g.owner?`<button class="icon-btn icon-btn-subtle" title="Удалить гильдию" data-delete-guild="${g.id}">${I.x}</button>`:""}</div>
   </article>`;
 }
 
@@ -1446,18 +1449,21 @@ function raidCard(r) {
     <div class="raid-head"><div><h4>${esc(r.title)}</h4><p>${esc(r.description)}</p></div><span class="tag tag-accent">${r.participants} игроков</span></div>
     <div class="progress-bar"><span style="width:${pct}%"></span></div>
     <div class="raid-meta"><span>${esc(guildName(r.guildId))}</span><span>${r.progress}/${r.days} дней</span><span>+${r.xp} XP / +${r.coins} монет</span></div>
-    <div class="actions">${joined?`<button class="btn ${done?"":"btn-primary"}" data-raid-check="${r.id}" ${done?"disabled":""}>${done?"Сегодня готово":"Отметить день"}</button>`:`<button class="btn btn-primary" data-join-raid="${r.id}">Участвовать</button>`}<button class="btn" data-share-raid="${r.id}">Share</button>${r.owner?`<button class="icon-btn icon-btn-subtle" title="Удалить рейд" data-delete-raid="${r.id}">${I.x}</button>`:""}</div>
+    <div class="actions">${joined?`<button class="btn ${done?"":"btn-primary"}" data-raid-check="${r.id}" ${done?"disabled":""}>${done?"Сегодня готово":"Отметить день"}</button>`:`<button class="btn btn-primary" data-join-raid="${r.id}">Участвовать</button>`}<button class="btn" data-edit-raid="${r.id}">Изменить</button><button class="btn" data-share-raid="${r.id}">Поделиться</button>${r.owner?`<button class="icon-btn icon-btn-subtle" title="Удалить рейд" data-delete-raid="${r.id}">${I.x}</button>`:""}</div>
   </article>`;
 }
 
 function socialScreen() {
   const guild = S.guilds.find(g => g.id === S.social.guildId);
-  const connected = S.social.telegramConnected && S.social.botUsername && S.social.botWebhook;
-  return shell("Сообщество", "Профиль героя, гильдии, групповые рейды, Telegram и invite-экспорт.", `
+  const connected = S.social.telegramConnected && S.social.botUsername;
+  const editGuild = S.guilds.find(g => g.id === S.social.editGuildId);
+  const editRaid = S.raids.find(r => r.id === S.social.editRaidId);
+  const botLink = S.social.botUsername ? `https://t.me/${S.social.botUsername.replace(/^@/,"")}` : "";
+  return shell("Сообщество", "Профиль, Telegram, гильдии и групповые рейды.", `
     <div class="grid">
       <section class="panel community-command"><div class="panel-inner">
-        <div><span class="label">Community status</span><h3>${connected?"Telegram подключён":"Локальный режим"}</h3><p class="muted">${connected?"Webhook и bot username сохранены. Backend может принимать события и отправлять напоминания.":"Сейчас всё работает local-first. Для реального бота нужен backend с TELEGRAM_BOT_TOKEN в env."}</p></div>
-        <div class="community-actions"><button class="btn" data-action="export-community-pack">Экспорт community pack</button><button class="btn" data-action="telegram-prompt">Prompt backend-бота</button><button class="btn btn-primary" data-action="copy-public-url">Публичная ссылка</button></div>
+        <div><span class="label">Статус</span><h3>${connected?"Telegram подключён":"Telegram не подключён"}</h3><p class="muted">${connected?"Можно открывать чат, копировать дневной отчёт и вести рейды из приложения.":"Добавь имя бота и нажми «Подключить». Для реальной отправки сообщений токен должен быть на сервере, не в браузере."}</p></div>
+        <div class="community-actions">${botLink?`<a class="btn btn-primary" href="${botLink}" target="_blank" rel="noreferrer">Открыть Telegram</a>`:""}<button class="btn" data-action="send-telegram-digest">Отправить в Telegram</button><button class="btn" data-action="copy-public-url">Ссылка профиля</button></div>
       </div></section>
       <section class="panel"><div class="panel-header"><div><h3 class="panel-title">Публичный профиль</h3><p class="panel-note">Локальный preview будущей публичной страницы героя.</p></div><span class="tag tag-accent">${S.social.publicProfile?"Открыт":"Закрыт"}</span></div>
         <div class="panel-inner social-profile">
@@ -1470,24 +1476,23 @@ function socialScreen() {
             <label class="field full"><span class="label">Описание профиля</span><input class="input" name="headline" value="${esc(S.social.headline)}" placeholder="Founder / Creator / Warrior"></label>
             <button class="btn btn-primary" type="submit">Сохранить профиль</button>
           </form>
-          <div class="share-url"><code>${esc(publicUrl())}</code><button class="btn" data-action="copy-public-url">Скопировать ссылку</button><button class="btn" data-action="export-share-card">Карточка для соцсетей</button></div>
+          <div class="share-url"><code>${esc(publicUrl())}</code><button class="btn" data-action="copy-public-url">Скопировать ссылку</button></div>
         </div>
       </section>
       <div class="split">
-        <section class="panel"><div class="panel-header"><h3 class="panel-title">Telegram-бот</h3><span class="tag">готово к backend</span></div><div class="panel-inner">
+        <section class="panel"><div class="panel-header"><h3 class="panel-title">Telegram</h3><span class="tag">${connected?"подключён":"настройка"}</span></div><div class="panel-inner">
           <form class="form-grid" data-form="telegram">
-            <label class="field"><span class="label">Telegram username</span><input class="input" name="telegramHandle" value="${esc(S.social.telegramHandle)}" placeholder="@username"></label>
+            <label class="field"><span class="label">Мой Telegram</span><input class="input" name="telegramHandle" value="${esc(S.social.telegramHandle)}" placeholder="@username"></label>
             <label class="field"><span class="label">Время отчёта</span><input class="input" name="dailyReportTime" value="${esc(S.social.dailyReportTime)}" placeholder="21:00"></label>
-            <label class="field"><span class="label">Bot username</span><input class="input" name="botUsername" value="${esc(S.social.botUsername)}" placeholder="@your_life_rpg_bot"></label>
-            <label class="field"><span class="label">Webhook URL</span><input class="input" name="botWebhook" value="${esc(S.social.botWebhook)}" placeholder="https://api.example.com/telegram/webhook"></label>
-            <button class="btn btn-primary" type="submit">Сохранить Telegram</button>
+            <label class="field full"><span class="label">Имя бота</span><input class="input" name="botUsername" value="${esc(S.social.botUsername)}" placeholder="@your_life_rpg_bot"></label>
+            <label class="field full telegram-advanced"><span class="label">Ссылка отправки</span><input class="input" name="botWebhook" value="${esc(S.social.botWebhook)}" placeholder="/api/telegram/send"></label>
+            <button class="btn btn-primary" type="submit">Сохранить</button>
           </form>
-          <p class="security-note">Токен бота не хранится в браузере. Для продакшена используй backend env: TELEGRAM_BOT_TOKEN.</p>
-          <div class="telegram-actions"><button class="btn ${S.social.telegramReminders?"btn-primary":""}" data-action="toggle-telegram">${S.social.telegramReminders?"Напоминания включены":"Включить напоминания"}</button><button class="btn ${connected?"btn-primary":""}" data-action="toggle-telegram-connection">${connected?"Связь активна":"Отметить как подключено"}</button><button class="btn" data-action="copy-telegram-digest">Тестовое сообщение</button><button class="btn" data-action="telegram-prompt">Prompt бота</button></div>
+          <div class="telegram-actions"><button class="btn ${S.social.telegramReminders?"btn-primary":""}" data-action="toggle-telegram">${S.social.telegramReminders?"Напоминания включены":"Включить напоминания"}</button><button class="btn ${connected?"btn-primary":""}" data-action="toggle-telegram-connection">${connected?"Подключено":"Подключить"}</button>${botLink?`<a class="btn" href="${botLink}" target="_blank" rel="noreferrer">Открыть бота</a>`:""}<button class="btn" data-action="send-telegram-digest">Отправить сообщение</button></div>
         </div></section>
-        <section class="panel"><div class="panel-header"><h3 class="panel-title">Invite-связь</h3><span class="tag">share</span></div><div class="panel-inner community-card">
-          <div><span class="label">Код мира</span><strong>${esc(S.social.communityCode)}</strong><p class="muted">Код нужен для приглашений, share payload и будущего подключения друзей через Supabase/Vercel backend.</p></div>
-          <div class="actions"><button class="btn" data-action="copy-community-code">Скопировать код</button><button class="btn" data-action="export-community-pack">Экспорт JSON</button></div>
+        <section class="panel"><div class="panel-header"><h3 class="panel-title">Быстрый обзор</h3><span class="tag">${esc(S.social.communityCode)}</span></div><div class="panel-inner community-card">
+          <div><span class="label">Код мира</span><strong>${esc(S.social.communityCode)}</strong><p class="muted">Используй его как простой код приглашения для друзей и групповых рейдов.</p></div>
+          <div class="actions"><button class="btn" data-action="copy-community-code">Скопировать код</button></div>
           <div class="mini-grid">
             <div class="metric"><strong>${S.guilds.length}</strong><span>Гильдии</span></div>
             <div class="metric"><strong>${S.raids.length}</strong><span>Рейды</span></div>
@@ -1499,25 +1504,27 @@ function socialScreen() {
       <div class="split">
         <section class="panel"><div class="panel-header"><div><h3 class="panel-title">Гильдии</h3><p class="panel-note">Создавай свои группы и отправляй invite другим людям.</p></div><span class="tag">${esc(guild?.name || "выбери гильдию")}</span></div><div class="panel-inner">
           <form class="form-grid community-form" data-form="guild">
-            <label class="field"><span class="label">Название</span><input class="input" name="name" placeholder="My Founder Guild"></label>
-            <label class="field"><span class="label">Фокус</span><input class="input" name="focus" placeholder="Карьера / Тело / Деньги"></label>
-            <label class="field full"><span class="label">Мотто</span><input class="input" name="motto" placeholder="Что объединяет участников?"></label>
-            <label class="field"><span class="label">Участники</span><input class="input" name="members" type="number" min="1" value="1"></label>
-            <label class="field"><span class="label">Приватность</span><select class="select" name="privacy"><option value="private">Приватная</option><option value="public">Открытая</option></select></label>
-            <button class="btn btn-primary" type="submit">Создать гильдию</button>
+            <input type="hidden" name="id" value="${esc(editGuild?.id || "")}">
+            <label class="field"><span class="label">Название</span><input class="input" name="name" value="${esc(editGuild?.name || "")}" placeholder="My Founder Guild"></label>
+            <label class="field"><span class="label">Фокус</span><input class="input" name="focus" value="${esc(editGuild?.focus || "")}" placeholder="Карьера / Тело / Деньги"></label>
+            <label class="field full"><span class="label">Мотто</span><input class="input" name="motto" value="${esc(editGuild?.motto || "")}" placeholder="Что объединяет участников?"></label>
+            <label class="field"><span class="label">Участники</span><input class="input" name="members" type="number" min="1" value="${esc(editGuild?.members || 1)}"></label>
+            <label class="field"><span class="label">Приватность</span><select class="select" name="privacy"><option value="private" ${editGuild?.privacy!=="public"?"selected":""}>Приватная</option><option value="public" ${editGuild?.privacy==="public"?"selected":""}>Открытая</option></select></label>
+            <div class="actions full"><button class="btn btn-primary" type="submit">${editGuild?"Сохранить гильдию":"Создать гильдию"}</button>${editGuild?`<button class="btn" type="button" data-action="cancel-community-edit">Отмена</button>`:""}</div>
           </form>
           <div class="guild-list community-list">${S.guilds.map(guildCard).join("")}</div>
         </div></section>
         <section class="panel"><div class="panel-header"><div><h3 class="panel-title">Групповые рейды</h3><p class="panel-note">Командные челленджи, которые можно шарить как приглашение.</p></div><button class="btn" data-action="seed-raids">Сбросить шаблоны</button></div><div class="panel-inner">
           <form class="form-grid community-form" data-form="raid">
-            <label class="field"><span class="label">Название</span><input class="input" name="title" placeholder="30 дней дисциплины"></label>
-            <label class="field"><span class="label">Гильдия</span><select class="select" name="guildId"><option value="">Без гильдии</option>${S.guilds.map(g => opt(g.id,g.name,S.social.guildId===g.id)).join("")}</select></label>
-            <label class="field full"><span class="label">Описание</span><textarea class="textarea" name="description" placeholder="Что делаем каждый день?"></textarea></label>
-            <label class="field"><span class="label">Дней</span><input class="input" name="days" type="number" min="1" value="7"></label>
-            <label class="field"><span class="label">Участники</span><input class="input" name="participants" type="number" min="1" value="1"></label>
-            <label class="field"><span class="label">XP</span><input class="input" name="xp" type="number" min="0" value="280"></label>
-            <label class="field"><span class="label">Монеты</span><input class="input" name="coins" type="number" min="0" value="84"></label>
-            <button class="btn btn-primary" type="submit">Создать рейд</button>
+            <input type="hidden" name="id" value="${esc(editRaid?.id || "")}">
+            <label class="field"><span class="label">Название</span><input class="input" name="title" value="${esc(editRaid?.title || "")}" placeholder="30 дней дисциплины"></label>
+            <label class="field"><span class="label">Гильдия</span><select class="select" name="guildId"><option value="">Без гильдии</option>${S.guilds.map(g => opt(g.id,g.name,(editRaid?.guildId || S.social.guildId)===g.id)).join("")}</select></label>
+            <label class="field full"><span class="label">Описание</span><textarea class="textarea" name="description" placeholder="Что делаем каждый день?">${esc(editRaid?.description || "")}</textarea></label>
+            <label class="field"><span class="label">Дней</span><input class="input" name="days" type="number" min="1" value="${esc(editRaid?.days || 7)}"></label>
+            <label class="field"><span class="label">Участники</span><input class="input" name="participants" type="number" min="1" value="${esc(editRaid?.participants || 1)}"></label>
+            <label class="field"><span class="label">XP</span><input class="input" name="xp" type="number" min="0" value="${esc(editRaid?.xp || 280)}"></label>
+            <label class="field"><span class="label">Монеты</span><input class="input" name="coins" type="number" min="0" value="${esc(editRaid?.coins || 84)}"></label>
+            <div class="actions full"><button class="btn btn-primary" type="submit">${editRaid?"Сохранить рейд":"Создать рейд"}</button>${editRaid?`<button class="btn" type="button" data-action="cancel-community-edit">Отмена</button>`:""}</div>
           </form>
           <div class="raid-list community-list">${S.raids.map(raidCard).join("")}</div>
         </div></section>
@@ -1681,13 +1688,13 @@ document.addEventListener("click", e => {
   if (action==="export-share-card") { exportShareCard(); return; }
   if (action==="toggle-telegram") { S.social.telegramReminders=!S.social.telegramReminders; save(); render(); toast(S.social.telegramReminders?"Telegram-напоминания включены":"Telegram-напоминания выключены"); return; }
   if (action==="toggle-telegram-connection") {
-    if (!S.social.botUsername || !S.social.botWebhook) { toast("Добавь bot username и webhook URL."); return; }
+    if (!S.social.botUsername) { toast("Добавь имя бота."); return; }
     S.social.telegramConnected=!S.social.telegramConnected; save(); render(); toast(S.social.telegramConnected?"Telegram-связь отмечена активной.":"Telegram-связь выключена."); return;
   }
-  if (action==="telegram-prompt") { copyText(`Ты Telegram-бот для ${brandName()}. Работай только через backend/serverless, токен бери из env TELEGRAM_BOT_TOKEN. Каждый день присылай мои активные квесты, принимай быстрые отметки привычек, вечером проси отчёт дня и сохраняй события в RPG-профиль. Мой профиль: ${publicUrl()}. Время отчёта: ${S.social.dailyReportTime || "21:00"}.`, "Prompt Telegram-бота скопирован."); return; }
   if (action==="copy-telegram-digest") { copyText(telegramDigest(), "Тестовое Telegram-сообщение скопировано."); return; }
+  if (action==="send-telegram-digest") { sendTelegramDigest(); return; }
   if (action==="copy-community-code") { copyText(S.social.communityCode || publicSlug(), "Код сообщества скопирован."); return; }
-  if (action==="export-community-pack") { exportCommunityPack(); return; }
+  if (action==="cancel-community-edit") { S.social.editGuildId=""; S.social.editRaidId=""; save(); render(); return; }
   if (action==="seed-raids") { S.guilds=structuredClone(GUILD_PRESETS); S.raids=structuredClone(RAID_PRESETS); save(); render(); toast("Гильдии и рейды обновлены."); return; }
 
   const qd = e.target.closest("[data-open-quest]")?.dataset.openQuest;
@@ -1719,14 +1726,18 @@ document.addEventListener("click", e => {
   if (us) unlockSkill(us);
   const guildId = e.target.closest("[data-join-guild]")?.dataset.joinGuild;
   if (guildId) joinGuild(guildId);
+  const editGuildId = e.target.closest("[data-edit-guild]")?.dataset.editGuild;
+  if (editGuildId) { S.social.editGuildId=editGuildId; S.social.editRaidId=""; save(); render(); return; }
   const shareGuildId = e.target.closest("[data-share-guild]")?.dataset.shareGuild;
-  if (shareGuildId) { copyText(communitySharePayload("guild", shareGuildId), "Invite гильдии скопирован."); return; }
+  if (shareGuildId) { copyText(communitySharePayload("guild", shareGuildId), "Приглашение гильдии скопировано."); return; }
   const deleteGuildId = e.target.closest("[data-delete-guild]")?.dataset.deleteGuild;
   if (deleteGuildId) deleteGuild(deleteGuildId);
   const raidId = e.target.closest("[data-join-raid]")?.dataset.joinRaid;
   if (raidId) joinRaid(raidId);
+  const editRaidId = e.target.closest("[data-edit-raid]")?.dataset.editRaid;
+  if (editRaidId) { S.social.editRaidId=editRaidId; S.social.editGuildId=""; save(); render(); return; }
   const shareRaidId = e.target.closest("[data-share-raid]")?.dataset.shareRaid;
-  if (shareRaidId) { copyText(communitySharePayload("raid", shareRaidId), "Invite рейда скопирован."); return; }
+  if (shareRaidId) { copyText(communitySharePayload("raid", shareRaidId), "Приглашение рейда скопировано."); return; }
   const deleteRaidId = e.target.closest("[data-delete-raid]")?.dataset.deleteRaid;
   if (deleteRaidId) deleteRaid(deleteRaidId);
   const raidCheck = e.target.closest("[data-raid-check]")?.dataset.raidCheck;
@@ -1837,11 +1848,11 @@ function handleForm(form) {
     S.social.dailyReportTime = fieldValue("dailyReportTime") || "21:00";
     S.social.botUsername = fieldValue("botUsername");
     S.social.botWebhook = fieldValue("botWebhook");
-    S.social.telegramConnected = Boolean(S.social.botUsername && S.social.botWebhook && S.social.telegramConnected);
+    S.social.telegramConnected = Boolean(S.social.botUsername && S.social.telegramConnected);
     toast("Telegram-настройки сохранены.");
   }
-  if (form.matches('[data-form="guild"]')) { if (!createGuild(d, form)) return; toast("Гильдия создана."); }
-  if (form.matches('[data-form="raid"]')) { if (!createRaid(d, form)) return; toast("Рейд создан."); }
+  if (form.matches('[data-form="guild"]')) { const editing=Boolean(d.get("id") || S.social.editGuildId); if (!createGuild(d, form)) return; toast(editing?"Гильдия сохранена.":"Гильдия создана."); }
+  if (form.matches('[data-form="raid"]')) { const editing=Boolean(d.get("id") || S.social.editRaidId); if (!createRaid(d, form)) return; toast(editing?"Рейд сохранён.":"Рейд создан."); }
   if (form.matches('[data-form="hero-edit"]')) {
     S.hero.name=d.get("name")?.trim()||S.hero.name; S.hero.codename=d.get("codename")?.trim()||"";
     S.hero.season=d.get("season")?.trim()||S.hero.season; S.hero.archetype=d.get("archetype")||S.hero.archetype;
