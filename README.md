@@ -1,88 +1,74 @@
-# Live RPG: Worldwalker
+# Live RPG
 
-Live RPG: Worldwalker is a dark-mode MVP for a customizable personal RPG system: hero profile, life spheres, character stats, quests, trials, badges, transformations, coin rewards, import/export, custom backgrounds, and progress review.
+Dark premium MVP for a personal life-RPG system. Create a hero, customize the world, complete quests, track habits, earn coins, and evolve your character.
 
-This repository is intentionally static for the first MVP pass. It runs without a package manager, so it can be opened locally, pushed to GitHub, and deployed to Vercel as a static app immediately.
+## Features
 
-## What is included
+- **Hero Profile** — Name, codename, archetype, mission, motto, evolution stages
+- **Main Character Scene** — Animated full-body RPG character, user logo, and custom background upload
+- **XP & Leveling** — Progress through levels with exponential XP curves
+- **Quest System** — Daily, Weekly, Main, Side, and Boss (Trial) quests
+- **Habit Tracker** — Daily/weekly habits with streak tracking and weekly scores
+- **Achievements** — 18 badges with rarity tiers (common → legendary)
+- **Skill Trees** — Unlock skills in Body, Mind, Finance, Creativity, Discipline
+- **Stats & Spheres** — Track life domains and character attributes
+- **Streak System** — Daily check-ins with XP multiplier bonuses
+- **Prestige** — Reset at level 30 for permanent XP bonus
+- **Loot Drops** — Random rewards on quest completion
+- **Comeback Bonus** — Rewards for returning after absences
+- **Theme System** — 5 color themes (Frost, Gold, Crimson, Violet, Steel)
+- **Dark/Light Mode** — Toggle between themes
+- **Appearance Studio** — Background presets, custom images, dim control
+- **Import/Export** — JSON backup and restore
+- **Responsive** — Works on desktop, tablet, and mobile
+- **Version** — `2.2.0`
 
-- Version `0.4.0`
-- First-run hero creation wizard
-- Empty-world start instead of forced demo state
-- Generated premium hero visuals with selectable character identity
-- Selectable visual themes
-- Archetype selection
-- Custom life spheres and stats
-- Interactive dashboard
-- Hero profile and global level progress
-- Quest log with daily, weekly, side, main, and boss quests
-- Daily quest replay by date instead of permanently locking repeatable habits
-- Daily XP cap to prevent progression inflation
-- Dedicated Trials screen with template import and one-time reward groups
-- Dedicated Badges screen with unlock logic
-- Appearance Studio with built-in backgrounds, custom image upload, dim control, and compact density
-- Compact MacBook-friendly layout and reduced navigation surface
-- Progress journal for completions, boss wins, reward redemptions, imports, exports, and transformations
-- JSON import/export backup
-- Quest completion loop with XP, coins, domain XP, stat XP, level-ups, and local activity history
-- Life spheres map
-- Character stats
-- Transformation path
-- Builder for custom quests, life spheres, stats, and rewards
-- Reward shop with coin redemption
-- Weekly review summary
-- Local persistence through `localStorage`
-- Supabase-ready PostgreSQL schema with RLS in `supabase/migrations/001_initial_schema.sql`
+## Local Run
 
-## Local run
-
-No install is required.
+No install required.
 
 ```bash
 python3 -m http.server 4173
 ```
 
-Open:
-
-```text
-http://localhost:4173
-```
+Open http://localhost:4173
 
 ## Deployment
 
-The app is static and can be deployed by Vercel from the repository root.
-
-Recommended production settings:
+Static app. Deploy to Vercel from repository root:
 
 - Framework Preset: Other
-- Build Command: empty
+- Build Command: (empty)
 - Output Directory: `.`
 
-GitHub Pages is also supported because the app is static.
+## Tech Stack
 
-## Supabase setup
+- Vanilla JavaScript (ES modules)
+- CSS custom properties + responsive grid
+- localStorage persistence
+- Web Audio API for sound effects
+- Canvas particle system for celebrations
 
-Create a Supabase project and run:
+## Architecture
 
-```bash
-supabase db push
+```
+├── index.html          Entry point
+├── app.js              Application logic (~700 lines)
+├── styles.css          Production styles (~900 lines)
+├── assets/             Background images
+├── supabase/           Database schema (RLS-ready)
+└── vercel.json         Deployment config
 ```
 
-or paste `supabase/migrations/001_initial_schema.sql` into the Supabase SQL editor.
+## Supabase Schema
 
-The schema is designed around:
+Optional backend schema in `supabase/migrations/001_initial_schema.sql`:
 
-- `auth.users` ownership
-- Row Level Security
-- event ledgers for XP and coins
-- custom domains, stats, quests, challenges, rewards, achievements, archetypes, templates, seasons, and weekly reviews
+- Row Level Security on all tables
+- Event-ledger accounting for XP and coins
+- Custom domains, stats, quests, challenges, rewards, achievements
+- Templates, seasons, and weekly reviews
 
-## Next engineering step
+## License
 
-Replace localStorage with Supabase client calls behind a small progression service:
-
-```ts
-completeQuest(userId, questId): ProgressionResult
-```
-
-That service should be the core deep module. It should atomically create quest completions, XP events, coin events, level changes, achievement unlocks, and review inputs.
+Private repository.

@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a2818"/>
+      <stop offset="100%" style="stop-color:#1a4a2a"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4ade80;stop-opacity:0.3"/>
+      <stop offset="100%" style="stop-color:#16a34a;stop-opacity:0.1"/>
+    </linearGradient>
+    <linearGradient id="robe" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a3a2a"/>
+      <stop offset="100%" style="stop-color:#0a1a10"/>
+    </linearGradient>
+  </defs>
+  <circle cx="100" cy="100" r="95" fill="url(#bg)" stroke="#4ade80" stroke-width="1" stroke-opacity="0.3"/>
+  <circle cx="100" cy="100" r="80" fill="none" stroke="url(#glow)" stroke-width="0.5"/>
+  <!-- Robe -->
+  <path d="M60 180 L60 120 Q60 100 80 95 L100 90 L120 95 Q140 100 140 120 L140 180" fill="url(#robe)"/>
+  <!-- Collar -->
+  <path d="M80 100 L100 95 L120 100 L115 115 L100 120 L85 115 Z" fill="#2a5a3a"/>
+  <!-- Head -->
+  <circle cx="100" cy="70" r="26" fill="#f0d0a0"/>
+  <!-- Neat hair -->
+  <path d="M74 65 Q74 42 100 40 Q126 42 126 65 Q126 52 100 50 Q74 52 74 65" fill="#4a3a2a"/>
+  <!-- Glasses -->
+  <circle cx="89" cy="68" r="8" fill="none" stroke="#4ade80" stroke-width="1.5"/>
+  <circle cx="111" cy="68" r="8" fill="none" stroke="#4ade80" stroke-width="1.5"/>
+  <line x1="97" y1="68" x2="103" y2="68" stroke="#4ade80" stroke-width="1"/>
+  <!-- Eyes behind glasses -->
+  <ellipse cx="89" cy="68" rx="2.5" ry="2" fill="#1a2a1a"/>
+  <ellipse cx="111" cy="68" rx="2.5" ry="2" fill="#1a2a1a"/>
+  <circle cx="90" cy="67" r="0.8" fill="white" opacity="0.8"/>
+  <circle cx="112" cy="67" r="0.8" fill="white" opacity="0.8"/>
+  <!-- Wise smile -->
+  <path d="M93 82 Q100 86 107 82" fill="none" stroke="#8a6a4a" stroke-width="1.2" stroke-linecap="round"/>
+  <!-- Book -->
+  <rect x="55" y="105" width="20" height="25" rx="2" fill="#2a5a3a" stroke="#4ade80" stroke-width="0.5"/>
+  <line x1="60" y1="112" x2="70" y2="112" stroke="#4ade80" stroke-width="0.5" opacity="0.5"/>
+  <line x1="60" y1="116" x2="68" y2="116" stroke="#4ade80" stroke-width="0.5" opacity="0.3"/>
+  <!-- Floating knowledge particles -->
+  <circle cx="150" cy="80" r="2" fill="#4ade80" opacity="0.4"/>
+  <circle cx="155" cy="95" r="1.5" fill="#4ade80" opacity="0.3"/>
+  <circle cx="145" cy="70" r="1" fill="#4ade80" opacity="0.5"/>
+</svg>

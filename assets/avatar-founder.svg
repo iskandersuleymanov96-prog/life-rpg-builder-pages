@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a1628"/>
+      <stop offset="100%" style="stop-color:#162a4a"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#72b7ff;stop-opacity:0.3"/>
+      <stop offset="100%" style="stop-color:#3a7bd5;stop-opacity:0.1"/>
+    </linearGradient>
+    <linearGradient id="suit" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#1e3a5f"/>
+      <stop offset="100%" style="stop-color:#0d1f3c"/>
+    </linearGradient>
+  </defs>
+  <circle cx="100" cy="100" r="95" fill="url(#bg)" stroke="#72b7ff" stroke-width="1" stroke-opacity="0.3"/>
+  <circle cx="100" cy="100" r="80" fill="none" stroke="url(#glow)" stroke-width="0.5"/>
+  <!-- Body -->
+  <path d="M70 180 L70 120 Q70 100 85 95 L100 90 L115 95 Q130 100 130 120 L130 180" fill="url(#suit)"/>
+  <!-- Shoulders -->
+  <path d="M55 130 Q70 115 85 118 L100 120 L115 118 Q130 115 145 130 L140 145 Q130 138 115 135 L100 133 L85 135 Q70 138 60 145 Z" fill="#1a3050"/>
+  <!-- Head -->
+  <circle cx="100" cy="70" r="28" fill="#c4a882"/>
+  <!-- Hair -->
+  <path d="M72 65 Q72 42 100 42 Q128 42 128 65 Q128 55 100 52 Q72 55 72 65" fill="#2a1a0a"/>
+  <!-- Eyes -->
+  <ellipse cx="89" cy="68" rx="4" ry="3" fill="#1a1a2e"/>
+  <ellipse cx="111" cy="68" rx="4" ry="3" fill="#1a1a2e"/>
+  <circle cx="90" cy="67" r="1" fill="white" opacity="0.8"/>
+  <circle cx="112" cy="67" r="1" fill="white" opacity="0.8"/>
+  <!-- Smile -->
+  <path d="M92 80 Q100 86 108 80" fill="none" stroke="#8a6a4a" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Tie -->
+  <path d="M97 120 L100 140 L103 120 Z" fill="#72b7ff"/>
+  <!-- Holographic display -->
+  <rect x="58" y="105" width="25" height="18" rx="2" fill="#72b7ff" opacity="0.15"/>
+  <line x1="62" y1="110" x2="78" y2="110" stroke="#72b7ff" stroke-width="1" opacity="0.5"/>
+  <line x1="62" y1="114" x2="75" y2="114" stroke="#72b7ff" stroke-width="1" opacity="0.3"/>
+  <line x1="62" y1="118" x2="72" y2="118" stroke="#72b7ff" stroke-width="1" opacity="0.2"/>
+</svg>
