@@ -464,6 +464,8 @@ create table public.raid_participants (
 create table public.telegram_settings (
   user_id uuid primary key references auth.users(id) on delete cascade,
   telegram_handle text,
+  bot_username text,
+  webhook_url text,
   chat_id text,
   reminders_enabled boolean not null default false,
   daily_report_time text not null default '21:00',

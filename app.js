@@ -1,5 +1,5 @@
-// RPG Life v2.4 — Production Build
-const VERSION = "2.4.0";
+// RPG Life v2.5 — Production Build
+const VERSION = "2.5.0";
 const APP_NAME = "Live RPG";
 const STORAGE_KEY = "rpg-life-state-v3";
 const ASSET_DB = "live-rpg-assets";
@@ -185,12 +185,14 @@ const EMPTY = {
   spheres: [], stats: [], quests: [], bossFights: [], rewards: [],
   completions: [], progressLog: [], completedDaily: {}, rewardGroups: {},
   lootHistory: [], lastLoginDate: "", dailyQuestDate: "",
-  social: { slug:"iskander", publicProfile:true, headline:"Главный герой собственного мира.", guildId:"", telegramHandle:"", telegramReminders:false, dailyReportTime:"21:00" },
+  branding: { appName:"Live RPG", tagline:"Персональный RPG-мир", iconKey:"", iconName:"" },
+  social: { slug:"iskander", publicProfile:true, headline:"Главный герой собственного мира.", guildId:"", telegramHandle:"", telegramReminders:false, dailyReportTime:"21:00", botUsername:"", botWebhook:"", communityCode:"RPG-ISKANDER" },
   guilds: [], raids: [], raidProgress: {},
+  drafts: { quest:{} },
 };
 
 let S = load();
-const assetUrls = { background:"", character:"" };
+const assetUrls = { background:"", character:"", brand:"" };
 applyTheme();
 
 // ─── Persistence ──────────────────────────────────────────────────────
@@ -210,6 +212,7 @@ function sanitize(raw) {
   if (n.route === "hero") n.route = "main";
   n.hero = { ...b.hero, ...(raw?.hero||{}) };
   n.appearance = { ...b.appearance, ...(raw?.appearance||{}) };
+  n.branding = { ...b.branding, ...(raw?.branding||{}) };
   n.social = { ...b.social, ...(raw?.social||{}) };
   if (!n.appearance.customBgKey && n.appearance.customBg?.startsWith?.("data:")) n.appearance.customBgName ||= "Старый фон";
   n.streak = { ...b.streak, ...(raw?.streak||{}) };
@@ -230,6 +233,7 @@ function sanitize(raw) {
   n.guilds         = Array.isArray(raw?.guilds)         ? raw.guilds         : [];
   n.raids          = Array.isArray(raw?.raids)          ? raw.raids          : [];
   n.raidProgress   = raw?.raidProgress && typeof raw.raidProgress === "object" ? raw.raidProgress : {};
+  n.drafts         = raw?.drafts && typeof raw.drafts === "object" ? { ...b.drafts, ...raw.drafts } : structuredClone(b.drafts);
   n.lastLoginDate  = raw?.lastLoginDate  || "";
   n.dailyQuestDate = raw?.dailyQuestDate || "";
   return finalize(n, false);
@@ -287,6 +291,7 @@ async function restoreAssets(shouldRender=true) {
   try {
     setAssetUrl("background", await getAsset(S.appearance?.customBgKey));
     setAssetUrl("character", await getAsset(S.hero?.customCharacterKey));
+    setAssetUrl("brand", await getAsset(S.branding?.iconKey));
     applyTheme();
     if (shouldRender) render();
   } catch {
@@ -305,6 +310,10 @@ function evoName()    { return (EVOLUTION_STAGES[S.hero.evolution]||EVOLUTION_ST
 function todayIds()   { return S.completedDaily[dateKey()] || []; }
 function todayXp()    { const d=dateKey(); return S.progressLog.filter(e => e.timestamp?.slice(0,10)===d && e.type==="quest").reduce((s,e) => s+Number(e.xp||0),0); }
 function weeklyXp()   { const c=Date.now()-7*864e5; return S.progressLog.filter(e => new Date(e.timestamp).getTime()>=c).reduce((s,e) => s+Number(e.xp||0),0); }
+function brandName()  { return S.branding?.appName?.trim() || APP_NAME; }
+function brandTagline(){ return S.branding?.tagline?.trim() || "Персональный RPG-мир"; }
+function brandIcon()  { return assetUrls.brand || "./assets/brand-logo.jpeg"; }
+function questDraft(){ S.drafts ||= {}; S.drafts.quest ||= {}; return S.drafts.quest; }
 function publicSlug() { return (S.social?.slug || S.hero.codename || S.hero.name || "hero").toLowerCase().trim().replace(/[^a-z0-9а-яё_-]+/gi,"-").replace(/^-+|-+$/g,"") || "hero"; }
 function publicUrl()  { return `${location.origin}${location.pathname}?profile=${encodeURIComponent(publicSlug())}`; }
 function guildName(id){ return S.guilds.find(g => g.id === id)?.name || "Без гильдии"; }
@@ -371,6 +380,7 @@ function applyTheme() {
   document.documentElement.style.setProperty("--aura", t.aura);
   document.documentElement.style.setProperty("--scene-bg", bg);
   document.documentElement.style.setProperty("--scene-dim", String(Math.min(92,Math.max(15,Number(a.bgDim||48)))/100));
+  document.title = `${brandName()} v${VERSION}`;
 }
 
 // ─── Sound ────────────────────────────────────────────────────────────
@@ -689,7 +699,7 @@ function checkRaidDay(id) {
 
 function exportShareCard() {
   const lines = [
-    `${APP_NAME} / ${S.hero.name || "Новый герой"}`,
+    `${brandName()} / ${S.hero.name || "Новый герой"}`,
     `Level ${S.hero.level} / ${evoName()}`,
     `XP ${S.hero.xp}/${xpFor(S.hero.level)} / ${S.hero.coins} монет`,
     `Гильдия: ${guildName(S.social.guildId)}`,
@@ -747,7 +757,7 @@ function importTemplate(arch) {
 }
 
 function exportProgress() {
-  const payload = { app:APP_NAME, version:VERSION, exportedAt:new Date().toISOString(), state:finalize(structuredClone(S),false) };
+  const payload = { app:brandName(), version:VERSION, exportedAt:new Date().toISOString(), state:finalize(structuredClone(S),false) };
   const blob = new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a"); a.href=url; a.download=`rpg-life-${dateKey()}.json`;
@@ -785,6 +795,12 @@ async function importImageAsset(file, kind) {
       S.appearance.bgPreset = "custom";
       setAssetUrl("background", file);
       toast("Фон мира обновлён.");
+    } else if (kind === "brand") {
+      await deleteAsset(S.branding.iconKey);
+      S.branding.iconKey = key;
+      S.branding.iconName = file.name;
+      setAssetUrl("brand", file);
+      toast("Иконка приложения обновлена.");
     } else {
       await deleteAsset(S.hero.customCharacterKey);
       S.hero.customCharacterKey = key;
@@ -806,10 +822,52 @@ function importCharacterFile(file) {
   importImageAsset(file, "character");
 }
 
+function importBrandIconFile(file) {
+  importImageAsset(file, "brand");
+}
+
+function syncQuestDraft(form) {
+  if (!(form instanceof HTMLFormElement)) return;
+  const d = new FormData(form);
+  S.drafts ||= {};
+  S.drafts.quest = {
+    title: form.querySelector('[name="title"]')?.value || "",
+    description: form.querySelector('[name="description"]')?.value || "",
+    type: d.get("type") || "Daily",
+    sphere: d.get("sphere") || "",
+    difficulty: d.get("difficulty") || "Normal",
+    stat: d.get("stat") || "",
+    xp: form.querySelector('[name="xp"]')?.value || "50",
+    coins: form.querySelector('[name="coins"]')?.value || "20",
+    deadline: form.querySelector('[name="deadline"]')?.value || "",
+  };
+  save();
+}
+
+function saveBrandingForm(form) {
+  if (!(form instanceof HTMLFormElement)) return;
+  const d = new FormData(form);
+  S.branding.appName = String(d.get("appName") || "").trim() || APP_NAME;
+  S.branding.tagline = String(d.get("tagline") || "").trim() || "Персональный RPG-мир";
+  applyTheme();
+  save();
+  render();
+  toast("Брендинг сохранён.");
+}
+
+function syncBrandingDraft(form) {
+  if (!(form instanceof HTMLFormElement)) return;
+  const d = new FormData(form);
+  S.branding.appName = String(d.get("appName") || "").trim() || APP_NAME;
+  S.branding.tagline = String(d.get("tagline") || "").trim() || "Персональный RPG-мир";
+  applyTheme();
+  save();
+}
+
 function hardReset() {
   if (!confirm("Удалить весь прогресс и начать заново?")) return;
   S = structuredClone(EMPTY);
-  localStorage.removeItem(STORAGE_KEY); setAssetUrl("background", null); setAssetUrl("character", null); applyTheme(); render();
+  localStorage.removeItem(STORAGE_KEY); setAssetUrl("background", null); setAssetUrl("character", null); setAssetUrl("brand", null); applyTheme(); render();
 }
 
 // ─── Skill Tree ───────────────────────────────────────────────────────
@@ -990,12 +1048,12 @@ function shell(title, subtitle, content, actions="") {
 }
 
 function sidebar() {
-  const primary = [["main","Main",I.hero],["dashboard","Сегодня",I.dash],["quests","Квесты",I.quest],["progress","Прогресс",I.log],["rewards","Награды",I.badge],["social","Социал",I.tree],["settings","Настройки",I.setting]];
+  const primary = [["main","Main",I.hero],["dashboard","Сегодня",I.dash],["quests","Квесты",I.quest],["progress","Прогресс",I.log],["rewards","Награды",I.badge],["social","Сообщество",I.tree],["settings","Настройки",I.setting]];
   const secondary = [["habits","Привычки",I.habit],["trials","Испытания",I.boss],["badges","Достижения",I.badge],["evolution","Эволюция",I.tree],["stats","Статы",I.stat],["log","Журнал",I.log]];
   const navBtn = ([route,label,icon], compact=false) => `<button class="nav-btn ${compact?"nav-compact":""} ${S.route===route?"active":""}" data-route="${route}" title="${esc(label)}" ${!S.onboardingComplete?"disabled":""}><span class="nav-icon">${icon}</span><span>${label}</span></button>`;
   return `
     <aside class="sidebar">
-      <div class="brand"><div class="brand-mark image-mark"><img src="./assets/brand-logo.jpeg" alt=""></div><div><h1 class="brand-title">${APP_NAME} <span>v${VERSION}</span></h1><p class="brand-sub">Персональный RPG-мир</p></div></div>
+      <div class="brand"><div class="brand-mark image-mark"><img src="${brandIcon()}" alt=""></div><div><h1 class="brand-title">${esc(brandName())} <span>v${VERSION}</span></h1><p class="brand-sub">${esc(brandTagline())}</p></div></div>
       <nav class="nav">${primary.map(n => navBtn(n)).join("")}</nav>
       <div class="nav-rail">${secondary.map(n => navBtn(n,true)).join("")}</div>
       <div class="sidebar-footer"><div class="season-label">Текущий сезон</div><div class="season-name">${esc(S.hero.season)}</div></div>
@@ -1163,19 +1221,20 @@ function heroScreen() {
 }
 
 function questsScreen() {
+  const qd = questDraft();
   return shell("Квесты","Создавай действия для XP, монет и роста персонажа.",`
     <div class="split">
       <section class="panel"><div class="panel-header"><h3 class="panel-title">Новый квест</h3></div><div class="panel-inner">
         <form class="form-grid" data-form="quest">
-          <label class="field full"><span class="label">Название</span><input class="input" name="title" required placeholder="90 минут deep work"></label>
-          <label class="field full"><span class="label">Описание</span><textarea class="textarea" name="description" placeholder="Что именно нужно сделать?"></textarea></label>
-          <label class="field"><span class="label">Тип</span><select class="select" name="type">${["Daily","Weekly","Main","Side","Boss"].map(x => opt(x,qLabel(x))).join("")}</select></label>
-          <label class="field"><span class="label">Сфера</span><select class="select" name="sphere">${S.spheres.map(s => opt(s.name)).join("")}</select></label>
-          <label class="field"><span class="label">Сложность</span><select class="select" name="difficulty">${["Easy","Normal","Hard","Trial"].map(x => opt(x,qLabel(x))).join("")}</select></label>
-          <label class="field"><span class="label">Стат</span><select class="select" name="stat">${S.stats.map(s => opt(s.name)).join("")}</select></label>
-          <label class="field"><span class="label">XP</span><input class="input" name="xp" type="number" min="1" value="50"></label>
-          <label class="field"><span class="label">Монеты</span><input class="input" name="coins" type="number" min="0" value="20"></label>
-          <label class="field full"><span class="label">Дедлайн</span><input class="input" name="deadline" placeholder="Сегодня, пятница"></label>
+          <label class="field full"><span class="label">Название</span><input class="input" name="title" required value="${esc(qd.title || "")}" placeholder="90 минут deep work"></label>
+          <label class="field full"><span class="label">Описание</span><textarea class="textarea" name="description" placeholder="Что именно нужно сделать?">${esc(qd.description || "")}</textarea></label>
+          <label class="field"><span class="label">Тип</span><select class="select" name="type">${["Daily","Weekly","Main","Side","Boss"].map(x => opt(x,qLabel(x),(qd.type || "Daily")===x)).join("")}</select></label>
+          <label class="field"><span class="label">Сфера</span><select class="select" name="sphere">${S.spheres.map((s,i) => opt(s.name,s.name,(qd.sphere || S.spheres[0]?.name || "")===s.name || (!qd.sphere && i===0))).join("")}</select></label>
+          <label class="field"><span class="label">Сложность</span><select class="select" name="difficulty">${["Easy","Normal","Hard","Trial"].map(x => opt(x,qLabel(x),(qd.difficulty || "Normal")===x)).join("")}</select></label>
+          <label class="field"><span class="label">Стат</span><select class="select" name="stat">${S.stats.map((s,i) => opt(s.name,s.name,(qd.stat || S.stats[0]?.name || "")===s.name || (!qd.stat && i===0))).join("")}</select></label>
+          <label class="field"><span class="label">XP</span><input class="input" name="xp" type="number" min="1" value="${esc(qd.xp || "50")}"></label>
+          <label class="field"><span class="label">Монеты</span><input class="input" name="coins" type="number" min="0" value="${esc(qd.coins || "20")}"></label>
+          <label class="field full"><span class="label">Дедлайн</span><input class="input" name="deadline" value="${esc(qd.deadline || "")}" placeholder="Сегодня, пятница"></label>
           <button class="btn btn-primary" type="submit">${I.plus} Добавить квест</button>
         </form>
       </div></section>
@@ -1283,7 +1342,7 @@ function raidCard(r) {
 
 function socialScreen() {
   const guild = S.guilds.find(g => g.id === S.social.guildId);
-  return shell("Социальный слой", "Публичный профиль, гильдии, групповые рейды и подготовка к Telegram-боту.", `
+  return shell("Сообщество", "Публичный профиль, гильдии, групповые рейды, Telegram и будущий API-слой.", `
     <div class="grid">
       <section class="panel"><div class="panel-header"><div><h3 class="panel-title">Публичный профиль</h3><p class="panel-note">Локальный preview будущей публичной страницы героя.</p></div><span class="tag tag-accent">${S.social.publicProfile?"Открыт":"Закрыт"}</span></div>
         <div class="panel-inner social-profile">
@@ -1304,15 +1363,22 @@ function socialScreen() {
           <form class="form-grid" data-form="telegram">
             <label class="field"><span class="label">Telegram username</span><input class="input" name="telegramHandle" value="${esc(S.social.telegramHandle)}" placeholder="@username"></label>
             <label class="field"><span class="label">Время отчёта</span><input class="input" name="dailyReportTime" value="${esc(S.social.dailyReportTime)}" placeholder="21:00"></label>
+            <label class="field"><span class="label">Bot username</span><input class="input" name="botUsername" value="${esc(S.social.botUsername)}" placeholder="@your_life_rpg_bot"></label>
+            <label class="field"><span class="label">Webhook URL</span><input class="input" name="botWebhook" value="${esc(S.social.botWebhook)}" placeholder="https://api.example.com/telegram/webhook"></label>
             <button class="btn btn-primary" type="submit">Сохранить Telegram</button>
           </form>
+          <p class="security-note">Токен бота не хранится в браузере. Для продакшена используй backend env: TELEGRAM_BOT_TOKEN.</p>
           <div class="telegram-actions"><button class="btn ${S.social.telegramReminders?"btn-primary":""}" data-action="toggle-telegram">${S.social.telegramReminders?"Напоминания включены":"Включить напоминания"}</button><button class="btn" data-action="telegram-prompt">Скопировать prompt бота</button></div>
         </div></section>
-        <section class="panel"><div class="panel-header"><h3 class="panel-title">Статус запуска</h3></div><div class="panel-inner mini-grid">
-          <div class="metric"><strong>${S.guilds.length}</strong><span>Гильдии</span></div>
-          <div class="metric"><strong>${S.raids.length}</strong><span>Рейды</span></div>
-          <div class="metric"><strong>${S.progressLog.filter(e=>e.type==="raid").length}</strong><span>Рейд-дни</span></div>
-          <div class="metric"><strong>${S.social.telegramReminders?"ON":"OFF"}</strong><span>Telegram</span></div>
+        <section class="panel"><div class="panel-header"><h3 class="panel-title">Комьюнити API</h3><span class="tag">приглашения</span></div><div class="panel-inner community-card">
+          <div><span class="label">Код мира</span><strong>${esc(S.social.communityCode)}</strong><p class="muted">Этот код можно использовать как invite-code для будущего Supabase/API подключения друзей, гильдий и рейдов.</p></div>
+          <div class="actions"><button class="btn" data-action="copy-community-code">Скопировать код</button><button class="btn" data-action="copy-public-url">Ссылка профиля</button></div>
+          <div class="mini-grid">
+            <div class="metric"><strong>${S.guilds.length}</strong><span>Гильдии</span></div>
+            <div class="metric"><strong>${S.raids.length}</strong><span>Рейды</span></div>
+            <div class="metric"><strong>${S.progressLog.filter(e=>e.type==="raid").length}</strong><span>Рейд-дни</span></div>
+            <div class="metric"><strong>${S.social.telegramReminders?"ON":"OFF"}</strong><span>Telegram</span></div>
+          </div>
         </div></section>
       </div>
       <section class="panel"><div class="panel-header"><h3 class="panel-title">Гильдии</h3><span class="tag">${esc(guild?.name || "выбери гильдию")}</span></div><div class="panel-inner guild-list">${S.guilds.map(guildCard).join("")}</div></section>
@@ -1360,6 +1426,17 @@ function settingsScreen() {
   const a = S.appearance || EMPTY.appearance;
   return shell("Настройки","Внешний вид, данные, звук и системные действия.",`
     <div class="grid">
+      <section class="panel"><div class="panel-header"><div><h3 class="panel-title">Брендинг приложения</h3><p class="panel-note">Название и маленькая иконка в левом меню.</p></div><span class="tag tag-accent">v${VERSION}</span></div><div class="panel-inner brand-editor">
+        <div class="brand-preview">
+          <div class="brand-mark image-mark"><img src="${brandIcon()}" alt=""></div>
+          <div><strong>${esc(brandName())}</strong><span>${esc(brandTagline())}</span><small>${esc(S.branding.iconName || "Дефолтная иконка")}</small></div>
+        </div>
+        <form class="form-grid" data-form="branding">
+          <label class="field"><span class="label">Название</span><input class="input" name="appName" value="${esc(brandName())}" placeholder="Live RPG"></label>
+          <label class="field"><span class="label">Подзаголовок</span><input class="input" name="tagline" value="${esc(brandTagline())}" placeholder="Персональный RPG-мир"></label>
+          <div class="actions full"><label class="btn file-btn">Загрузить иконку<input type="file" accept="image/*" data-brand-icon-file></label><button class="btn btn-primary" type="button" data-action="save-branding">Сохранить бренд</button></div>
+        </form>
+      </div></section>
       <section class="panel"><div class="panel-header"><h3 class="panel-title">Внешний вид</h3><span class="tag tag-accent">${BACKGROUND_PRESETS[a.bgPreset]?.label||"Свой фон"}</span></div><div class="panel-inner control-grid">
         <div><h4>Фон мира</h4><p class="muted">${esc(a.customBgName || "Выбери сцену или загрузи своё изображение до 50 MB.")}</p><div class="preset-row">${Object.entries(BACKGROUND_PRESETS).map(([k,p]) => `<button class="theme-card ${a.bgPreset===k&&!a.customBgKey&&!a.customBg?"active":""}" data-bg-preset="${k}"><strong>${p.label}</strong></button>`).join("")}</div><label class="btn file-btn">Загрузить фон<input type="file" accept="image/*" data-background-file></label></div>
         <div><h4>Персонаж</h4><p class="muted">${esc(S.hero.customCharacterName || "Загрузи свою картинку героя до 50 MB.")}</p><div class="hero-avatar xl">${heroAvatarContent()}</div><label class="btn file-btn">Загрузить героя<input type="file" accept="image/*" data-character-file></label></div>
@@ -1452,6 +1529,7 @@ document.addEventListener("click", e => {
   if (action==="skip-setup"||action==="setup-finish") finishSetup(false);
   if (action==="import-template") { importTemplate(S.hero.archetype); save(); render(); }
   if (action==="export-progress") { exportProgress(); render(); }
+  if (action==="save-branding") { saveBrandingForm(e.target.closest("form")); return; }
   if (action==="reset-appearance") { S.appearance=structuredClone(EMPTY.appearance); setAssetUrl("background", null); applyTheme(); save(); render(); }
   if (action==="close-detail") { S.activeDetail=null; save(); render(); }
   if (action==="transform") transformHero();
@@ -1463,7 +1541,8 @@ document.addEventListener("click", e => {
   if (action==="copy-public-url") { copyText(publicUrl(), "Публичная ссылка скопирована."); return; }
   if (action==="export-share-card") { exportShareCard(); return; }
   if (action==="toggle-telegram") { S.social.telegramReminders=!S.social.telegramReminders; save(); render(); toast(S.social.telegramReminders?"Telegram-напоминания включены":"Telegram-напоминания выключены"); return; }
-  if (action==="telegram-prompt") { copyText(`Ты Telegram-бот для ${APP_NAME}. Каждый день присылай мои квесты, принимай быстрые отметки привычек и вечером проси отчёт дня. Мой профиль: ${publicUrl()}`, "Prompt Telegram-бота скопирован."); return; }
+  if (action==="telegram-prompt") { copyText(`Ты Telegram-бот для ${brandName()}. Работай только через backend/serverless, токен бери из env TELEGRAM_BOT_TOKEN. Каждый день присылай мои активные квесты, принимай быстрые отметки привычек, вечером проси отчёт дня и сохраняй события в RPG-профиль. Мой профиль: ${publicUrl()}. Время отчёта: ${S.social.dailyReportTime || "21:00"}.`, "Prompt Telegram-бота скопирован."); return; }
+  if (action==="copy-community-code") { copyText(S.social.communityCode || publicSlug(), "Код сообщества скопирован."); return; }
   if (action==="seed-raids") { S.guilds=structuredClone(GUILD_PRESETS); S.raids=structuredClone(RAID_PRESETS); save(); render(); toast("Гильдии и рейды обновлены."); return; }
 
   const qd = e.target.closest("[data-open-quest]")?.dataset.openQuest;
@@ -1547,13 +1626,21 @@ document.addEventListener("change", e => {
   if (bi?.files?.[0]) { importBgFile(bi.files[0]); bi.value=""; return; }
   const ci = e.target.closest("[data-character-file]");
   if (ci?.files?.[0]) { importCharacterFile(ci.files[0]); ci.value=""; return; }
+  const brand = e.target.closest("[data-brand-icon-file]");
+  if (brand?.files?.[0]) { importBrandIconFile(brand.files[0]); brand.value=""; return; }
   const dim = e.target.closest("[data-background-dim]");
   if (dim) { S.appearance.bgDim=Number(dim.value); applyTheme(); save(); return; }
   const den = e.target.closest("[data-density]");
   if (den) { S.appearance.density=den.value; applyTheme(); save(); render(); }
+  const quest = e.target.closest('[data-form="quest"]');
+  if (quest) { syncQuestDraft(quest); return; }
 });
 
 document.addEventListener("input", e => {
+  const quest = e.target.closest('[data-form="quest"]');
+  if (quest) { syncQuestDraft(quest); return; }
+  const branding = e.target.closest('[data-form="branding"]');
+  if (branding) { syncBrandingDraft(branding); return; }
   const identity = e.target.closest('[data-form="identity"]');
   if (!identity) return;
   const field = e.target.getAttribute("name");
@@ -1580,8 +1667,12 @@ function handleForm(form) {
   const fieldValue = name => (d.get(name)?.trim?.() || form.querySelector(`[name="${name}"]`)?.value?.trim?.() || "");
   if (form.matches('[data-form="quick-sphere"],[data-form="sphere"]')) { const n=fieldValue("name"); if(n&&!byName(S.spheres,n)) S.spheres.push({id:uid(),name:n,level:1,xp:0,active:true}); toast("Сфера добавлена."); }
   if (form.matches('[data-form="quick-stat"],[data-form="stat"]')) { const n=fieldValue("name"); if(n&&!byName(S.stats,n)) S.stats.push({id:uid(),name:n,level:1,xp:0,active:true}); toast("Стат добавлен."); }
-  if (form.matches('[data-form="quest"]')) { createQuest(d, form); toast("Квест создан."); }
+  if (form.matches('[data-form="quest"]')) { syncQuestDraft(form); createQuest(d, form); S.drafts.quest = {}; toast("Квест создан."); }
   if (form.matches('[data-form="reward"]')) { createReward(d, form); toast("Награда создана."); }
+  if (form.matches('[data-form="branding"]')) {
+    saveBrandingForm(form);
+    return;
+  }
   if (form.matches('[data-form="social-profile"]')) {
     S.social.slug = fieldValue("slug") || publicSlug();
     S.social.headline = fieldValue("headline") || S.social.headline;
@@ -1591,6 +1682,8 @@ function handleForm(form) {
   if (form.matches('[data-form="telegram"]')) {
     S.social.telegramHandle = fieldValue("telegramHandle");
     S.social.dailyReportTime = fieldValue("dailyReportTime") || "21:00";
+    S.social.botUsername = fieldValue("botUsername");
+    S.social.botWebhook = fieldValue("botWebhook");
     toast("Telegram-настройки сохранены.");
   }
   if (form.matches('[data-form="hero-edit"]')) {

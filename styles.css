@@ -1,4 +1,4 @@
-/* RPG Life v2.4 — Production Styles */
+/* RPG Life v2.5 — Production Styles */
 
 /* ─── Variables ─────────────────────────────────────────────────── */
 :root {
@@ -212,6 +212,15 @@ svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.7;
 .share-url { display:flex; gap:10px; flex-wrap:wrap; align-items:center; padding:12px; border:1px solid var(--line); border-radius:var(--radius); background:rgba(255,255,255,0.03); }
 .share-url code { min-width:0; overflow:hidden; text-overflow:ellipsis; color:var(--accent-2); }
 .telegram-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }
+.security-note { margin:12px 0 0; padding:10px 12px; border:1px solid color-mix(in srgb, var(--warning) 32%, transparent); border-radius:var(--radius); background:color-mix(in srgb, var(--warning) 8%, rgba(255,255,255,0.035)); color:var(--muted); font-size:12px; line-height:1.45; }
+.community-card { display:grid; gap:14px; }
+.community-card strong { display:block; margin-top:6px; font-size:22px; letter-spacing:0; }
+.brand-editor { display:grid; grid-template-columns:minmax(260px,0.45fr) minmax(0,1fr); gap:16px; align-items:start; }
+.brand-preview { display:grid; grid-template-columns:auto minmax(0,1fr); gap:12px; align-items:center; padding:14px; border:1px solid var(--line); border-radius:var(--radius); background:rgba(255,255,255,0.035); }
+.brand-preview strong, .brand-preview span, .brand-preview small { display:block; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.brand-preview strong { font-size:18px; }
+.brand-preview span { margin-top:4px; color:var(--muted); font-size:12px; font-weight:800; }
+.brand-preview small { margin-top:6px; color:var(--muted-2); font-size:11px; }
 
 /* ─── Quest Type Badges ─────────────────────────────────────────── */
 .q-daily { background:rgba(59,130,246,0.12); color:#60a5fa; border-color:rgba(59,130,246,0.3); }
@@ -432,7 +441,7 @@ input[type="range"]::-moz-range-thumb { width:18px; height:18px; border-radius:5
   .main, .sidebar { padding:14px; }
   .topbar, .hero-card { display:grid; grid-template-columns:1fr; }
   .actions, .btn, .inline-form { width:100%; }
-  .mini-grid, .metric-row, .form-grid, .theme-grid, .choice-grid, .choice-grid.compact, .achievement-grid, .control-grid, .stepper, .setup-footer, .review-item, .quest-card, .reward-card, .guild-card, .share-card-preview { grid-template-columns:1fr; }
+  .mini-grid, .metric-row, .form-grid, .theme-grid, .choice-grid, .choice-grid.compact, .achievement-grid, .control-grid, .brand-editor, .stepper, .setup-footer, .review-item, .quest-card, .reward-card, .guild-card, .share-card-preview { grid-template-columns:1fr; }
   .nav { display:flex; gap:8px; max-width:100%; overflow-x:auto; padding-bottom:4px; }
   .nav-rail { display:flex; gap:8px; overflow-x:auto; margin-top:8px; padding-top:8px; }
   .nav-btn { min-width:max-content; justify-content:center; padding:0 11px; }
