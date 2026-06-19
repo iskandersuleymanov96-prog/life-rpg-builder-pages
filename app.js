@@ -1,5 +1,5 @@
-// RPG Life v2.7 — Production Build
-const VERSION = "2.7.0";
+// RPG Life v2.8 — Production Build
+const VERSION = "2.8.0";
 const APP_NAME = "Live RPG";
 const STORAGE_KEY = "rpg-life-state-v3";
 const ASSET_DB = "live-rpg-assets";
@@ -318,6 +318,11 @@ function publicSlug() { return (S.social?.slug || S.hero.codename || S.hero.name
 function publicUrl()  { return `${location.origin}${location.pathname}?profile=${encodeURIComponent(publicSlug())}`; }
 function guildName(id){ return S.guilds.find(g => g.id === id)?.name || "Без гильдии"; }
 function raidDone(id) { return S.raidProgress?.[id]?.days?.includes(dateKey()) || false; }
+function telegramEndpoint() {
+  const custom = S.social?.botWebhook?.trim();
+  if (custom) return custom;
+  return location.hostname.includes("vercel.app") ? "/api/telegram/send" : "";
+}
 
 function maybeLevel(e) {
   let up = false;
@@ -336,13 +341,14 @@ async function copyText(text, label="Скопировано.") {
 
 async function sendTelegramDigest() {
   const text = telegramDigest();
-  if (!S.social.botWebhook) {
+  const endpoint = telegramEndpoint();
+  if (!endpoint) {
     await copyText(text, "Сообщение скопировано. Открой Telegram и отправь его боту.");
     if (S.social.botUsername) window.open(`https://t.me/${S.social.botUsername.replace(/^@/,"")}`, "_blank", "noopener,noreferrer");
     return;
   }
   try {
-    const res = await fetch(S.social.botWebhook, {
+    const res = await fetch(endpoint, {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
       body:JSON.stringify({ text, profile:publicUrl(), source:"life-rpg" }),
@@ -808,21 +814,6 @@ function telegramDigest() {
   const activeQuests = S.quests.slice(0,5).map((q,i) => `${i+1}. ${q.title} (+${q.xp} XP, ${q.coins} монет)`).join("\n") || "Квестов пока нет. Создай первый квест в Life RPG.";
   const joinedRaids = S.raids.filter(r => r.status==="joined" || S.raidProgress[r.id]).slice(0,3).map(r => `• ${r.title}: ${r.progress}/${r.days} дней`).join("\n") || "Активных рейдов пока нет.";
   return `${brandName()} — ежедневный отчёт\n\nГерой: ${S.hero.name || "Новый герой"} / Lv ${S.hero.level}\nГильдия: ${guildName(S.social.guildId)}\nСерия: ${S.streak.current} дней\n\nКвесты на сегодня:\n${activeQuests}\n\nРейды:\n${joinedRaids}\n\nВечером спроси: что выполнено, что помешало, какой один квест главный завтра?`;
-}
-
-function exportShareCard() {
-  const lines = [
-    `${brandName()} / ${S.hero.name || "Новый герой"}`,
-    `Level ${S.hero.level} / ${evoName()}`,
-    `XP ${S.hero.xp}/${xpFor(S.hero.level)} / ${S.hero.coins} монет`,
-    `Гильдия: ${guildName(S.social.guildId)}`,
-    publicUrl(),
-  ];
-  const blob = new Blob([lines.join("\n")], { type:"text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a"); a.href = url; a.download = `live-rpg-card-${publicSlug()}.txt`;
-  document.body.append(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-  toast("Карточка героя экспортирована.");
 }
 
 // ─── Transform / Prestige ─────────────────────────────────────────────
@@ -1461,11 +1452,7 @@ function socialScreen() {
   const botLink = S.social.botUsername ? `https://t.me/${S.social.botUsername.replace(/^@/,"")}` : "";
   return shell("Сообщество", "Профиль, Telegram, гильдии и групповые рейды.", `
     <div class="grid">
-      <section class="panel community-command"><div class="panel-inner">
-        <div><span class="label">Статус</span><h3>${connected?"Telegram подключён":"Telegram не подключён"}</h3><p class="muted">${connected?"Можно открывать чат, копировать дневной отчёт и вести рейды из приложения.":"Добавь имя бота и нажми «Подключить». Для реальной отправки сообщений токен должен быть на сервере, не в браузере."}</p></div>
-        <div class="community-actions">${botLink?`<a class="btn btn-primary" href="${botLink}" target="_blank" rel="noreferrer">Открыть Telegram</a>`:""}<button class="btn" data-action="send-telegram-digest">Отправить в Telegram</button><button class="btn" data-action="copy-public-url">Ссылка профиля</button></div>
-      </div></section>
-      <section class="panel"><div class="panel-header"><div><h3 class="panel-title">Публичный профиль</h3><p class="panel-note">Локальный preview будущей публичной страницы героя.</p></div><span class="tag tag-accent">${S.social.publicProfile?"Открыт":"Закрыт"}</span></div>
+      <section class="panel"><div class="panel-header"><div><h3 class="panel-title">Публичный профиль</h3><p class="panel-note">Карточка героя, которой можно поделиться.</p></div><span class="tag tag-accent">${S.social.publicProfile?"Открыт":"Закрыт"}</span></div>
         <div class="panel-inner social-profile">
           <div class="share-card-preview">
             <div class="hero-avatar xl">${heroAvatarContent()}</div>
@@ -1482,17 +1469,15 @@ function socialScreen() {
       <div class="split">
         <section class="panel"><div class="panel-header"><h3 class="panel-title">Telegram</h3><span class="tag">${connected?"подключён":"настройка"}</span></div><div class="panel-inner">
           <form class="form-grid" data-form="telegram">
-            <label class="field"><span class="label">Мой Telegram</span><input class="input" name="telegramHandle" value="${esc(S.social.telegramHandle)}" placeholder="@username"></label>
             <label class="field"><span class="label">Время отчёта</span><input class="input" name="dailyReportTime" value="${esc(S.social.dailyReportTime)}" placeholder="21:00"></label>
-            <label class="field full"><span class="label">Имя бота</span><input class="input" name="botUsername" value="${esc(S.social.botUsername)}" placeholder="@your_life_rpg_bot"></label>
-            <label class="field full telegram-advanced"><span class="label">Ссылка отправки</span><input class="input" name="botWebhook" value="${esc(S.social.botWebhook)}" placeholder="/api/telegram/send"></label>
+            <label class="field"><span class="label">Имя бота</span><input class="input" name="botUsername" value="${esc(S.social.botUsername)}" placeholder="@your_life_rpg_bot"></label>
             <button class="btn btn-primary" type="submit">Сохранить</button>
           </form>
           <div class="telegram-actions"><button class="btn ${S.social.telegramReminders?"btn-primary":""}" data-action="toggle-telegram">${S.social.telegramReminders?"Напоминания включены":"Включить напоминания"}</button><button class="btn ${connected?"btn-primary":""}" data-action="toggle-telegram-connection">${connected?"Подключено":"Подключить"}</button>${botLink?`<a class="btn" href="${botLink}" target="_blank" rel="noreferrer">Открыть бота</a>`:""}<button class="btn" data-action="send-telegram-digest">Отправить сообщение</button></div>
         </div></section>
-        <section class="panel"><div class="panel-header"><h3 class="panel-title">Быстрый обзор</h3><span class="tag">${esc(S.social.communityCode)}</span></div><div class="panel-inner community-card">
-          <div><span class="label">Код мира</span><strong>${esc(S.social.communityCode)}</strong><p class="muted">Используй его как простой код приглашения для друзей и групповых рейдов.</p></div>
-          <div class="actions"><button class="btn" data-action="copy-community-code">Скопировать код</button></div>
+        <section class="panel"><div class="panel-header"><h3 class="panel-title">Команда</h3><span class="tag">${S.guilds.length} гильдий</span></div><div class="panel-inner community-card">
+          <div><span class="label">Активная гильдия</span><strong>${esc(guild?.name || "Не выбрана")}</strong><p class="muted">${esc(guild?.motto || "Выбери или создай гильдию ниже.")}</p></div>
+          <div class="actions"><button class="btn" data-action="copy-public-url">Скопировать ссылку профиля</button></div>
           <div class="mini-grid">
             <div class="metric"><strong>${S.guilds.length}</strong><span>Гильдии</span></div>
             <div class="metric"><strong>${S.raids.length}</strong><span>Рейды</span></div>
@@ -1505,23 +1490,20 @@ function socialScreen() {
         <section class="panel"><div class="panel-header"><div><h3 class="panel-title">Гильдии</h3><p class="panel-note">Создавай свои группы и отправляй invite другим людям.</p></div><span class="tag">${esc(guild?.name || "выбери гильдию")}</span></div><div class="panel-inner">
           <form class="form-grid community-form" data-form="guild">
             <input type="hidden" name="id" value="${esc(editGuild?.id || "")}">
-            <label class="field"><span class="label">Название</span><input class="input" name="name" value="${esc(editGuild?.name || "")}" placeholder="My Founder Guild"></label>
+            <label class="field"><span class="label">Название</span><input class="input" name="name" value="${esc(editGuild?.name || "")}" placeholder="Моя гильдия"></label>
             <label class="field"><span class="label">Фокус</span><input class="input" name="focus" value="${esc(editGuild?.focus || "")}" placeholder="Карьера / Тело / Деньги"></label>
             <label class="field full"><span class="label">Мотто</span><input class="input" name="motto" value="${esc(editGuild?.motto || "")}" placeholder="Что объединяет участников?"></label>
-            <label class="field"><span class="label">Участники</span><input class="input" name="members" type="number" min="1" value="${esc(editGuild?.members || 1)}"></label>
-            <label class="field"><span class="label">Приватность</span><select class="select" name="privacy"><option value="private" ${editGuild?.privacy!=="public"?"selected":""}>Приватная</option><option value="public" ${editGuild?.privacy==="public"?"selected":""}>Открытая</option></select></label>
             <div class="actions full"><button class="btn btn-primary" type="submit">${editGuild?"Сохранить гильдию":"Создать гильдию"}</button>${editGuild?`<button class="btn" type="button" data-action="cancel-community-edit">Отмена</button>`:""}</div>
           </form>
           <div class="guild-list community-list">${S.guilds.map(guildCard).join("")}</div>
         </div></section>
-        <section class="panel"><div class="panel-header"><div><h3 class="panel-title">Групповые рейды</h3><p class="panel-note">Командные челленджи, которые можно шарить как приглашение.</p></div><button class="btn" data-action="seed-raids">Сбросить шаблоны</button></div><div class="panel-inner">
+        <section class="panel"><div class="panel-header"><div><h3 class="panel-title">Групповые рейды</h3><p class="panel-note">Командные челленджи, которые можно отправить друзьям.</p></div></div><div class="panel-inner">
           <form class="form-grid community-form" data-form="raid">
             <input type="hidden" name="id" value="${esc(editRaid?.id || "")}">
             <label class="field"><span class="label">Название</span><input class="input" name="title" value="${esc(editRaid?.title || "")}" placeholder="30 дней дисциплины"></label>
             <label class="field"><span class="label">Гильдия</span><select class="select" name="guildId"><option value="">Без гильдии</option>${S.guilds.map(g => opt(g.id,g.name,(editRaid?.guildId || S.social.guildId)===g.id)).join("")}</select></label>
             <label class="field full"><span class="label">Описание</span><textarea class="textarea" name="description" placeholder="Что делаем каждый день?">${esc(editRaid?.description || "")}</textarea></label>
             <label class="field"><span class="label">Дней</span><input class="input" name="days" type="number" min="1" value="${esc(editRaid?.days || 7)}"></label>
-            <label class="field"><span class="label">Участники</span><input class="input" name="participants" type="number" min="1" value="${esc(editRaid?.participants || 1)}"></label>
             <label class="field"><span class="label">XP</span><input class="input" name="xp" type="number" min="0" value="${esc(editRaid?.xp || 280)}"></label>
             <label class="field"><span class="label">Монеты</span><input class="input" name="coins" type="number" min="0" value="${esc(editRaid?.coins || 84)}"></label>
             <div class="actions full"><button class="btn btn-primary" type="submit">${editRaid?"Сохранить рейд":"Создать рейд"}</button>${editRaid?`<button class="btn" type="button" data-action="cancel-community-edit">Отмена</button>`:""}</div>
@@ -1685,7 +1667,6 @@ document.addEventListener("click", e => {
   if (action==="toggle-dark") { S.darkMode=!S.darkMode; applyTheme(); save(); render(); }
   if (action==="prestige") prestigeUp();
   if (action==="copy-public-url") { copyText(publicUrl(), "Публичная ссылка скопирована."); return; }
-  if (action==="export-share-card") { exportShareCard(); return; }
   if (action==="toggle-telegram") { S.social.telegramReminders=!S.social.telegramReminders; save(); render(); toast(S.social.telegramReminders?"Telegram-напоминания включены":"Telegram-напоминания выключены"); return; }
   if (action==="toggle-telegram-connection") {
     if (!S.social.botUsername) { toast("Добавь имя бота."); return; }
@@ -1693,9 +1674,7 @@ document.addEventListener("click", e => {
   }
   if (action==="copy-telegram-digest") { copyText(telegramDigest(), "Тестовое Telegram-сообщение скопировано."); return; }
   if (action==="send-telegram-digest") { sendTelegramDigest(); return; }
-  if (action==="copy-community-code") { copyText(S.social.communityCode || publicSlug(), "Код сообщества скопирован."); return; }
   if (action==="cancel-community-edit") { S.social.editGuildId=""; S.social.editRaidId=""; save(); render(); return; }
-  if (action==="seed-raids") { S.guilds=structuredClone(GUILD_PRESETS); S.raids=structuredClone(RAID_PRESETS); save(); render(); toast("Гильдии и рейды обновлены."); return; }
 
   const qd = e.target.closest("[data-open-quest]")?.dataset.openQuest;
   if (qd && !e.target.closest("button,input,select,textarea,label,a")) { S.activeDetail={type:"quest",id:qd}; save(); render(); }

@@ -1,6 +1,12 @@
 {
   "cleanUrls": true,
   "trailingSlash": false,
+  "crons": [
+    {
+      "path": "/api/telegram/remind",
+      "schedule": "0 16 * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/",

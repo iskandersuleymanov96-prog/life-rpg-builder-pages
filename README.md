@@ -23,7 +23,7 @@ Dark premium MVP for a personal life-RPG system. Create a hero, customize the wo
 - **Community Layer** — Public profile preview, editable guilds, editable raids, simple sharing, and Telegram sending through a server endpoint
 - **Import/Export** — JSON backup and restore
 - **Responsive** — Works on desktop, tablet, and mobile
-- **Version** — `2.7.0`
+- **Version** — `2.8.0`
 
 ## Local Run
 
@@ -76,11 +76,14 @@ Optional backend schema in `supabase/migrations/001_initial_schema.sql`:
 
 ## Telegram
 
-The static app can open Telegram and prepare messages. Real bot sending requires a server endpoint:
+The static app can open Telegram and prepare messages. Real bot sending works on Vercel through serverless endpoints:
 
 - Endpoint: `/api/telegram/send`
-- Env vars: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
-- Optional env var: `LIFE_RPG_WEBHOOK_KEY`
+- Bot webhook: `/api/telegram/webhook`
+- Webhook setup: `/api/telegram/setup-webhook`
+- Daily reminder cron: `/api/telegram/remind`
+- Env vars: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `APP_BASE_URL`
+- Optional env vars: `TELEGRAM_WEBHOOK_SECRET`, `LIFE_RPG_WEBHOOK_KEY`
 
 ## License
 
