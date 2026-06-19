@@ -1,5 +1,5 @@
-// RPG Life v2.9 — Production Build
-const VERSION = "2.9.0";
+// RPG Life v2.9.1 — Production Build
+const VERSION = "2.9.1";
 const APP_NAME = "Live RPG";
 const STORAGE_KEY = "rpg-life-state-v3";
 const ASSET_DB = "live-rpg-assets";
