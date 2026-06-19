@@ -7,10 +7,18 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ ok:false, error:"method_not_allowed" });
 
   const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
+  const fallbackChatId = process.env.TELEGRAM_CHAT_ID;
   const requiredKey = process.env.LIFE_RPG_WEBHOOK_KEY;
+  const requestedChatId = String(req.body?.chatId || fallbackChatId || "").trim();
+  const allowedChatIds = String(process.env.TELEGRAM_ALLOWED_CHAT_IDS || fallbackChatId || "")
+    .split(",")
+    .map(v => v.trim())
+    .filter(Boolean);
 
-  if (!token || !chatId) return res.status(500).json({ ok:false, error:"telegram_not_configured" });
+  if (!token || !requestedChatId) return res.status(500).json({ ok:false, error:"telegram_not_configured" });
+  if (allowedChatIds.length && !allowedChatIds.includes(requestedChatId)) {
+    return res.status(403).json({ ok:false, error:"chat_not_allowed" });
+  }
   if (requiredKey && req.headers["x-life-rpg-key"] !== requiredKey) {
     return res.status(401).json({ ok:false, error:"unauthorized" });
   }
@@ -21,7 +29,7 @@ export default async function handler(req, res) {
   const tg = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method:"POST",
     headers:{ "Content-Type":"application/json" },
-    body:JSON.stringify({ chat_id:chatId, text }),
+    body:JSON.stringify({ chat_id:requestedChatId, text }),
   });
 
   const payload = await tg.json().catch(() => ({}));

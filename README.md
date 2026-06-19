@@ -82,7 +82,7 @@ The static app can open Telegram and prepare messages. Real bot sending works on
 - Bot webhook: `/api/telegram/webhook`
 - Webhook setup: `/api/telegram/setup-webhook`
 - Daily reminder cron: `/api/telegram/remind`
-- Env vars: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `APP_BASE_URL`
+- Env vars: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_ALLOWED_CHAT_IDS`, `APP_BASE_URL`
 - Optional env vars: `TELEGRAM_WEBHOOK_SECRET`, `LIFE_RPG_WEBHOOK_KEY`
 
 ## License
