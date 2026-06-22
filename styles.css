@@ -187,7 +187,7 @@ svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.7;
 .card-top { display:flex; justify-content:space-between; gap:10px; color:var(--muted); font-size:12px; font-weight:800; }
 .small-card small { display:block; margin-top:8px; color:var(--muted); }
 
-.quest-list, .reward-list, .achievement-grid, .review-list, .evolution-list, .habit-list, .guild-list, .raid-list { display:grid; gap:10px; }
+.quest-list, .reward-list, .achievement-grid, .review-list, .evolution-list, .habit-list, .guild-list, .raid-list, .hypothesis-list { display:grid; gap:10px; }
 .quest-card { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:14px; align-items:center; padding:14px; min-width:0; }
 .quest-card > div, .reward-card > div { min-width:0; }
 .quest-card h4, .reward-card h4 { margin:0; font-size:14px; }
@@ -225,6 +225,20 @@ svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.7;
 .brand-preview strong { font-size:18px; }
 .brand-preview span { margin-top:4px; color:var(--muted); font-size:12px; font-weight:800; }
 .brand-preview small { margin-top:6px; color:var(--muted-2); font-size:11px; }
+
+/* ─── Hypotheses ────────────────────────────────────────────────── */
+.hypothesis-card { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:16px; align-items:start; padding:16px; border:1px solid var(--line); border-radius:var(--radius); background:linear-gradient(135deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02)); }
+.hypothesis-card.status-testing { border-color:color-mix(in srgb, var(--accent) 34%, transparent); background:color-mix(in srgb, var(--accent) 7%, rgba(255,255,255,0.03)); }
+.hypothesis-card.status-validated { border-color:color-mix(in srgb, var(--success) 34%, transparent); background:rgba(74,222,128,0.045); }
+.hypothesis-card.status-rejected { opacity:0.68; }
+.hypothesis-main { display:grid; gap:10px; min-width:0; }
+.hypothesis-main p { margin:0; color:var(--muted); line-height:1.5; }
+.hypothesis-evidence { display:grid; gap:4px; padding:10px 12px; border:1px solid var(--line); border-radius:9px; background:rgba(255,255,255,0.03); }
+.hypothesis-evidence span { color:var(--muted-2); font-size:10px; font-weight:800; text-transform:uppercase; }
+.hypothesis-evidence strong { font-size:12px; line-height:1.45; }
+.hypothesis-actions { display:grid; grid-template-columns:repeat(2, minmax(112px,1fr)); gap:8px; justify-items:stretch; }
+.hypothesis-actions .btn, .hypothesis-actions .icon-btn { width:100%; }
+.hypothesis-actions .icon-btn { height:39px; }
 
 /* ─── Quest Type Badges ─────────────────────────────────────────── */
 .q-daily { background:rgba(59,130,246,0.12); color:#60a5fa; border-color:rgba(59,130,246,0.3); }
@@ -446,7 +460,7 @@ input[type="range"]::-moz-range-thumb { width:18px; height:18px; border-radius:5
   .main, .sidebar { padding:14px; }
   .topbar, .hero-card { display:grid; grid-template-columns:1fr; }
   .actions, .btn, .inline-form { width:100%; }
-  .mini-grid, .metric-row, .form-grid, .theme-grid, .choice-grid, .choice-grid.compact, .achievement-grid, .control-grid, .brand-editor, .stepper, .setup-footer, .review-item, .quest-card, .reward-card, .guild-card, .share-card-preview { grid-template-columns:1fr; }
+  .mini-grid, .metric-row, .form-grid, .theme-grid, .choice-grid, .choice-grid.compact, .achievement-grid, .control-grid, .brand-editor, .stepper, .setup-footer, .review-item, .quest-card, .reward-card, .guild-card, .share-card-preview, .hypothesis-card, .hypothesis-actions { grid-template-columns:1fr; }
   .nav { display:flex; gap:8px; max-width:100%; overflow-x:auto; padding-bottom:4px; }
   .nav-rail { display:flex; gap:8px; overflow-x:auto; margin-top:8px; padding-top:8px; }
   .nav-btn { min-width:max-content; justify-content:center; padding:0 11px; }

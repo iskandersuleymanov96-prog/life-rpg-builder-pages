@@ -1,5 +1,5 @@
-// RPG Life v2.9.1 — Production Build
-const VERSION = "2.9.1";
+// RPG Life v2.10.0 — Production Build
+const VERSION = "2.10.0";
 const APP_NAME = "Live RPG";
 const STORAGE_KEY = "rpg-life-state-v3";
 const ASSET_DB = "live-rpg-assets";
@@ -14,6 +14,7 @@ const I = {
   hero: `<svg viewBox="0 0 24 24"><path d="M12 3l7 4v5c0 4.7-2.7 7.7-7 9-4.3-1.3-7-4.3-7-9V7l7-4Z"/><path d="M9 12l2 2 4-5"/></svg>`,
   quest: `<svg viewBox="0 0 24 24"><path d="M7 4h10l2 3v13H5V7l2-3Z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>`,
   habit: `<svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z"/><path d="M12 6v6l4 2"/></svg>`,
+  hypothesis: `<svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v5l-5.3 9.1A2.6 2.6 0 0 0 7 21h10a2.6 2.6 0 0 0 2.3-3.9L14 8V3"/><path d="M8 16h8M10 12h4"/></svg>`,
   badge: `<svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4Z"/><path d="M7 6H4v2a4 4 0 0 0 4 4M17 6h3v2a4 4 0 0 1-4 4"/></svg>`,
   stat: `<svg viewBox="0 0 24 24"><path d="M5 19V9M12 19V5M19 19v-7M3 19h18"/></svg>`,
   tree: `<svg viewBox="0 0 24 24"><path d="M12 3l3 6 6 3-6 3-3 6-3-6-6-3 6-3 3-6Z"/><path d="M19 4v4M21 6h-4"/></svg>`,
@@ -173,13 +174,13 @@ const EMPTY = {
   streak: { current:0, best:0, lastCheckIn:"", totalCheckIns:0 },
   habits: [], skillTree: { unlocked:[] }, prestige: { level:0, totalXP:0, bonus:0 },
   activeDetail: null,
-  spheres: [], stats: [], quests: [], bossFights: [], rewards: [],
+  spheres: [], stats: [], quests: [], bossFights: [], rewards: [], hypotheses: [],
   completions: [], progressLog: [], completedDaily: {}, rewardGroups: {},
   lootHistory: [], lastLoginDate: "", dailyQuestDate: "",
   branding: { appName:"Live RPG", tagline:"Персональный RPG-мир", iconKey:"", iconName:"" },
   social: { slug:"iskander", publicProfile:true, headline:"Главный герой собственного мира.", guildId:"", telegramHandle:"", telegramChatId:"", telegramReminders:false, dailyReportTime:"21:00", botUsername:"", botWebhook:"", telegramConnected:false, communityCode:"RPG-ISKANDER", editGuildId:"", editRaidId:"" },
   guilds: [], raids: [], raidProgress: {},
-  drafts: { quest:{} },
+  drafts: { quest:{}, hypothesis:{} },
 };
 
 let S = load();
@@ -215,6 +216,7 @@ function sanitize(raw) {
   n.quests     = Array.isArray(raw?.quests)     ? raw.quests     : [];
   n.bossFights = Array.isArray(raw?.bossFights) ? raw.bossFights : [];
   n.rewards    = Array.isArray(raw?.rewards)    ? raw.rewards    : [];
+  n.hypotheses = Array.isArray(raw?.hypotheses) ? raw.hypotheses : [];
   n.completions    = Array.isArray(raw?.completions)    ? raw.completions    : [];
   n.progressLog    = Array.isArray(raw?.progressLog)    ? raw.progressLog    : n.completions.map(c => ({ ...c, type:"quest", timestamp: c.date||new Date().toISOString() }));
   n.completedDaily = raw?.completedDaily && typeof raw.completedDaily === "object" ? raw.completedDaily : {};
@@ -309,6 +311,11 @@ function publicSlug() { return (S.social?.slug || S.hero.codename || S.hero.name
 function publicUrl()  { return `${location.origin}${location.pathname}?profile=${encodeURIComponent(publicSlug())}`; }
 function guildName(id){ return S.guilds.find(g => g.id === id)?.name || "Без гильдии"; }
 function raidDone(id) { return S.raidProgress?.[id]?.days?.includes(dateKey()) || false; }
+function hypothesisLabel(v) { return ({ idea:"Идея", testing:"Проверяется", validated:"Подтверждена", rejected:"Отклонена" })[v] || "Идея"; }
+function hypothesisScore(h) {
+  const impact = { low:1, medium:2, high:3 }[h.impact] || 2;
+  return Number(h.confidence||3) * impact;
+}
 function telegramEndpoint() {
   const custom = S.social?.botWebhook?.trim();
   if (custom) return custom;
@@ -680,6 +687,82 @@ function deleteQuest(id) {
   S.quests = S.quests.filter(q => q.id !== id); save(); render();
 }
 
+// ─── Hypothesis Logic ─────────────────────────────────────────────────
+function createHypothesis(data, fallbackForm=null) {
+  const title = dataValue(data, "title", fallbackForm);
+  if (!title) { toast("Добавь название гипотезы."); return false; }
+  const id = data.get("id") || "";
+  const payload = {
+    title,
+    statement:dataValue(data, "statement", fallbackForm)||"Если я сделаю это действие, то получу измеримый результат.",
+    metric:dataValue(data, "metric", fallbackForm)||"Что должно измениться?",
+    evidence:dataValue(data, "evidence", fallbackForm)||"",
+    sphere:data.get("sphere")||S.spheres[0]?.name||"Дисциплина",
+    confidence:Math.max(1, Math.min(5, Number(data.get("confidence")||3))),
+    impact:data.get("impact")||"medium",
+    status:data.get("status")||"idea",
+    deadline:dataValue(data, "deadline", fallbackForm)||"На этой неделе",
+    updatedAt:new Date().toISOString(),
+  };
+  if (id) {
+    const h = S.hypotheses.find(i => i.id === id);
+    if (!h) return false;
+    Object.assign(h, payload);
+    logProgress({ title:`Гипотеза обновлена: ${title}`, type:"hypothesis", xp:0, coins:0, sphere:payload.sphere, comment:payload.statement });
+  } else {
+    S.hypotheses.unshift({ id:uid(), createdAt:new Date().toISOString(), ...payload });
+    logProgress({ title:`Гипотеза создана: ${title}`, type:"hypothesis", xp:5, coins:0, sphere:payload.sphere, comment:payload.statement });
+  }
+  return true;
+}
+
+function setHypothesisStatus(id, status) {
+  const h = S.hypotheses.find(i => i.id === id);
+  if (!h) return;
+  h.status = status;
+  h.updatedAt = new Date().toISOString();
+  const xp = status === "validated" ? 80 : status === "rejected" ? 30 : 10;
+  if (status === "validated" || status === "rejected") {
+    S.hero.xp += xp;
+    maybeLevel(S.hero);
+    const sp = byName(S.spheres, h.sphere);
+    if (sp) { sp.xp += xp; maybeLevel(sp); }
+  }
+  logProgress({ title:`Гипотеза: ${h.title}`, type:"hypothesis", xp, coins:0, sphere:h.sphere, comment:hypothesisLabel(status) });
+  finalize(S); save(); playSound(status === "validated" ? "achievement" : "checkin"); toast(`Статус: ${hypothesisLabel(status)}`); render();
+}
+
+function deleteHypothesis(id) {
+  const h = S.hypotheses.find(i => i.id === id);
+  if (!h) return;
+  if (!confirm(`Удалить гипотезу "${h.title}"?`)) return;
+  S.hypotheses = S.hypotheses.filter(i => i.id !== id);
+  save(); toast("Гипотеза удалена."); render();
+}
+
+function questFromHypothesis(id) {
+  const h = S.hypotheses.find(i => i.id === id);
+  if (!h) return;
+  S.quests.unshift({
+    id:uid(),
+    title:`Проверить: ${h.title}`,
+    description:`Гипотеза: ${h.statement}\nМетрика: ${h.metric}`,
+    type:"Side",
+    sphere:h.sphere,
+    difficulty:h.impact === "high" ? "Hard" : "Normal",
+    xp:h.impact === "high" ? 120 : 70,
+    coins:h.impact === "high" ? 45 : 25,
+    stats:[S.stats[0]?.name||"Фокус"],
+    status:"active",
+    deadline:h.deadline || "На этой неделе",
+    hypothesisId:id,
+  });
+  h.status = "testing";
+  h.updatedAt = new Date().toISOString();
+  logProgress({ title:`Квест из гипотезы: ${h.title}`, type:"hypothesis", xp:10, coins:0, sphere:h.sphere, comment:"Создан проверочный квест." });
+  save(); toast("Квест для проверки создан."); render();
+}
+
 // ─── Habit Logic ──────────────────────────────────────────────────────
 function createHabit(data, fallbackForm=null) {
   const title = dataValue(data, "title", fallbackForm);
@@ -739,6 +822,14 @@ function redeemReward(id) {
   r.redemptions = Number(r.redemptions||0)+1;
   logProgress({ title:r.title, type:"reward", xp:0, coins:-r.cost, sphere:r.category, comment:"Награда получена." });
   finalize(S, false); save(); playSound("reward"); toast(`Награда: ${r.title}`); render();
+}
+
+function deleteReward(id) {
+  const r = S.rewards.find(i => i.id === id);
+  if (!r) return;
+  if (!confirm(`Удалить награду "${r.title}"?`)) return;
+  S.rewards = S.rewards.filter(i => i.id !== id);
+  save(); toast("Награда удалена."); render();
 }
 
 function joinGuild(id) {
@@ -1203,7 +1294,7 @@ function shell(title, subtitle, content, actions="") {
 }
 
 function sidebar() {
-  const primary = [["main","Main",I.hero],["dashboard","Сегодня",I.dash],["quests","Квесты",I.quest],["progress","Прогресс",I.log],["rewards","Награды",I.badge],["social","Сообщество",I.tree],["settings","Настройки",I.setting]];
+  const primary = [["main","Main",I.hero],["dashboard","Сегодня",I.dash],["hypotheses","Гипотезы",I.hypothesis],["quests","Квесты",I.quest],["progress","Прогресс",I.log],["rewards","Награды",I.badge],["social","Сообщество",I.tree],["settings","Настройки",I.setting]];
   const secondary = [["habits","Привычки",I.habit],["trials","Испытания",I.boss],["badges","Достижения",I.badge],["evolution","Эволюция",I.tree],["stats","Статы",I.stat],["log","Журнал",I.log]];
   const navBtn = ([route,label,icon], compact=false) => `<button class="nav-btn ${compact?"nav-compact":""} ${S.route===route?"active":""}" data-route="${route}" title="${esc(label)}" ${!S.onboardingComplete?"disabled":""}><span class="nav-icon">${icon}</span><span>${label}</span></button>`;
   return `
@@ -1304,6 +1395,7 @@ function dashboardScreen() {
       <section class="panel"><div class="panel-header"><div><h3 class="panel-title">Активные квесты</h3><p class="panel-note">Каждое действие меняет героя.</p></div><button class="btn btn-primary" data-route="quests">${I.plus} Новый квест</button></div><div class="panel-inner quest-list">${S.quests.filter(q => q.status==="active").slice(0,6).map(questCard).join("")||emptyState("Создай первый квест.")}</div></section>
     </div><div class="grid">
       <section class="panel"><div class="panel-header"><h3 class="panel-title">Сферы жизни</h3><button class="link-btn" data-route="stats">Управлять</button></div><div class="panel-inner mini-grid">${S.spheres.slice(0,6).map(sphereCard).join("")||emptyState("Сфер пока нет.")}</div></section>
+      <section class="panel"><div class="panel-header"><h3 class="panel-title">Гипотезы</h3><button class="link-btn" data-route="hypotheses">Открыть</button></div><div class="panel-inner quest-list">${S.hypotheses.filter(h => h.status!=="rejected").slice(0,3).map(h => `<article class="small-card"><div class="card-top"><strong>${esc(h.title)}</strong><span>${esc(hypothesisLabel(h.status))}</span></div><small>${esc(h.metric || "Метрика не задана")}</small></article>`).join("")||emptyState("Идей для проверки пока нет.")}</div></section>
       <section class="panel"><div class="panel-header"><h3 class="panel-title">Испытания</h3><button class="link-btn" data-route="trials">Открыть</button></div><div class="panel-inner quest-list">${S.bossFights.slice(0,2).map(bossCard).join("")||emptyState("Испытаний пока нет.")}</div></section>
       <section class="panel"><div class="panel-header"><h3 class="panel-title">Статы</h3></div><div class="panel-inner mini-grid">${S.stats.slice(0,6).map(statCard).join("")||emptyState("Пока пусто.")}</div></section>
       <section class="panel"><div class="panel-header"><h3 class="panel-title">Награды</h3><span class="tag tag-accent">${S.hero.coins} монет</span></div><div class="panel-inner reward-list">${S.rewards.slice(0,3).map(rewardCard).join("")||emptyState("Создай награды.")}</div></section>
@@ -1350,7 +1442,7 @@ function statCard(s) {
 }
 
 function rewardCard(r) {
-  return `<article class="reward-card"><div><h4>${esc(r.title)}</h4><p>${esc(r.category)}${r.redemptions?` \u00b7 ${r.redemptions}x`:""}</p></div><button class="btn" data-redeem="${r.id}">${r.cost} \u00b7 Получить</button></article>`;
+  return `<article class="reward-card"><div><h4>${esc(r.title)}</h4><p>${esc(r.category)}${r.redemptions?` \u00b7 ${r.redemptions}x`:""}</p></div><div class="card-actions"><button class="btn" data-redeem="${r.id}">${r.cost} \u00b7 Получить</button><button class="icon-btn icon-btn-subtle" title="Удалить награду" data-delete-reward="${r.id}">${I.x}</button></div></article>`;
 }
 
 function achievementCard(a) {
@@ -1358,7 +1450,67 @@ function achievementCard(a) {
   return `<article class="achievement-card ${unlocked?"unlocked":""}"><div class="achievement-medal">${unlocked?"✓":"?"}</div><div><h4>${esc(a.title)}</h4><p>${esc(a.cond)}</p><div class="tags"><span class="tag">${esc(a.cat)}</span><span class="tag tag-accent">${esc(a.rarity)}</span></div></div></article>`;
 }
 
+function hypothesisCard(h) {
+  const linkedQuest = S.quests.find(q => q.hypothesisId === h.id);
+  const score = hypothesisScore(h);
+  return `
+    <article class="hypothesis-card status-${esc(h.status||"idea")}">
+      <div class="hypothesis-main">
+        <div class="card-top"><strong>${esc(h.title)}</strong><span>${esc(hypothesisLabel(h.status))}</span></div>
+        <p>${esc(h.statement)}</p>
+        <div class="hypothesis-evidence"><span>Метрика</span><strong>${esc(h.metric)}</strong></div>
+        ${h.evidence?`<div class="hypothesis-evidence"><span>Факты</span><strong>${esc(h.evidence)}</strong></div>`:""}
+        <div class="tags"><span class="tag tag-accent">${esc(h.sphere)}</span><span class="tag">Вес ${score}</span><span class="tag">Уверенность ${Number(h.confidence||3)}/5</span><span class="tag">${esc(h.deadline||"Без срока")}</span></div>
+      </div>
+      <div class="hypothesis-actions">
+        <button class="btn" data-hypothesis-status="${h.id}:testing">Проверять</button>
+        <button class="btn btn-primary" data-hypothesis-quest="${h.id}" ${linkedQuest?"disabled":""}>${linkedQuest?"Квест создан":"В квест"}</button>
+        <button class="btn" data-hypothesis-status="${h.id}:validated">Подтвердить</button>
+        <button class="btn" data-hypothesis-status="${h.id}:rejected">Отклонить</button>
+        <button class="icon-btn icon-btn-subtle" title="Удалить" data-delete-hypothesis="${h.id}">${I.x}</button>
+      </div>
+    </article>`;
+}
+
 // ─── Screen Functions ─────────────────────────────────────────────────
+function hypothesesScreen() {
+  const active = S.hypotheses.filter(h => ["idea","testing"].includes(h.status||"idea"));
+  const validated = S.hypotheses.filter(h => h.status === "validated");
+  const rejected = S.hypotheses.filter(h => h.status === "rejected");
+  const top = [...S.hypotheses].sort((a,b) => hypothesisScore(b)-hypothesisScore(a)).slice(0,3);
+  return shell("Гипотезы", "Проверяй идеи как RPG-эксперименты: формулировка, метрика, факты, статус и квест для проверки.", `
+    <div class="grid">
+      <section class="panel"><div class="panel-inner metric-row">
+        <div class="metric"><strong>${S.hypotheses.length}</strong><span>Всего</span></div>
+        <div class="metric"><strong>${active.length}</strong><span>В работе</span></div>
+        <div class="metric"><strong>${validated.length}</strong><span>Подтверждено</span></div>
+        <div class="metric"><strong>${rejected.length}</strong><span>Отклонено</span></div>
+      </div></section>
+      <div class="split">
+        <section class="panel"><div class="panel-header"><div><h3 class="panel-title">Новая гипотеза</h3><p class="panel-note">Пиши так, чтобы её можно было проверить действием.</p></div></div><div class="panel-inner">
+          <form class="form-grid" data-form="hypothesis">
+            <label class="field full"><span class="label">Название</span><input class="input" name="title" placeholder="Если я публикую 3 коротких видео в неделю..." required></label>
+            <label class="field full"><span class="label">Формулировка</span><textarea class="textarea" name="statement" placeholder="Если я сделаю X, то получу Y, потому что Z."></textarea></label>
+            <label class="field full"><span class="label">Метрика успеха</span><input class="input" name="metric" placeholder="Например: 5 заявок, 3 тренировки, +20% фокуса"></label>
+            <label class="field"><span class="label">Сфера</span><select class="select" name="sphere">${S.spheres.map(s => opt(s.name)).join("") || opt("Дисциплина")}</select></label>
+            <label class="field"><span class="label">Статус</span><select class="select" name="status">${["idea","testing","validated","rejected"].map(v => opt(v,hypothesisLabel(v),v==="idea")).join("")}</select></label>
+            <label class="field"><span class="label">Уверенность 1-5</span><input class="input" name="confidence" type="number" min="1" max="5" value="3"></label>
+            <label class="field"><span class="label">Влияние</span><select class="select" name="impact">${opt("medium","Среднее",true)}${opt("high","Высокое")}${opt("low","Низкое")}</select></label>
+            <label class="field full"><span class="label">Факты / наблюдения</span><textarea class="textarea" name="evidence" placeholder="Что уже известно? Какие сигналы есть?"></textarea></label>
+            <label class="field full"><span class="label">Срок проверки</span><input class="input" name="deadline" placeholder="До пятницы, 7 дней, этот месяц"></label>
+            <button class="btn btn-primary" type="submit">Добавить гипотезу</button>
+          </form>
+        </div></section>
+        <section class="panel"><div class="panel-header"><h3 class="panel-title">Приоритет проверки</h3><span class="tag tag-accent">score</span></div><div class="panel-inner review-list">
+          ${top.map(h => `<article class="review-item"><span>${esc(hypothesisLabel(h.status))}</span><strong>${esc(h.title)}</strong><small>Вес ${hypothesisScore(h)} / ${esc(h.sphere)} / ${esc(h.deadline||"без срока")}</small></article>`).join("") || emptyState("Добавь первую гипотезу.")}
+        </div></section>
+      </div>
+      <section class="panel"><div class="panel-header"><div><h3 class="panel-title">Журнал гипотез</h3><p class="panel-note">Удаляй лишнее, подтверждай сильное, превращай проверку в квест.</p></div><span class="tag">${S.hypotheses.length}</span></div><div class="panel-inner hypothesis-list">
+        ${S.hypotheses.map(hypothesisCard).join("") || emptyState("Гипотез пока нет. Добавь первую идею для проверки.")}
+      </div></section>
+    </div>`);
+}
+
 function heroScreen() {
   return shell("Hero","Edit identity, mission, season and theme.",`
     <div class="split">${heroCard()}<section class="panel"><div class="panel-header"><h3 class="panel-title">Hero Editor</h3></div><div class="panel-inner">
@@ -1648,7 +1800,7 @@ function render() {
   if (!S.onboardingComplete || S.route==="setup") { document.querySelector("#app").innerHTML = setupScreen(); return; }
   ensureSocialData(S);
   generateDaily();
-  const views = { main:mainScreen, dashboard:dashboardScreen, hero:mainScreen, quests:questsScreen, habits:habitsScreen, progress:progressScreen, rewards:rewardsScreen, social:socialScreen, settings:settingsScreen, trials:trialsScreen, badges:badgesScreen, evolution:evolutionScreen, stats:statsScreen, log:logScreen };
+  const views = { main:mainScreen, dashboard:dashboardScreen, hero:mainScreen, hypotheses:hypothesesScreen, quests:questsScreen, habits:habitsScreen, progress:progressScreen, rewards:rewardsScreen, social:socialScreen, settings:settingsScreen, trials:trialsScreen, badges:badgesScreen, evolution:evolutionScreen, stats:statsScreen, log:logScreen };
   document.querySelector("#app").innerHTML = (views[S.route]||mainScreen)();
 }
 
@@ -1736,8 +1888,16 @@ document.addEventListener("click", e => {
   if (bossCompleteId) completeBoss(bossCompleteId);
   const redeem = e.target.closest("[data-redeem]")?.dataset.redeem;
   if (redeem) redeemReward(redeem);
+  const deleteRewardId = e.target.closest("[data-delete-reward]")?.dataset.deleteReward;
+  if (deleteRewardId) deleteReward(deleteRewardId);
   const dq = e.target.closest("[data-delete-quest]")?.dataset.deleteQuest;
   if (dq) deleteQuest(dq);
+  const hypothesisStatus = e.target.closest("[data-hypothesis-status]")?.dataset.hypothesisStatus;
+  if (hypothesisStatus) { const [id,status] = hypothesisStatus.split(":"); setHypothesisStatus(id, status); }
+  const hypothesisQuest = e.target.closest("[data-hypothesis-quest]")?.dataset.hypothesisQuest;
+  if (hypothesisQuest) questFromHypothesis(hypothesisQuest);
+  const deleteHypothesisId = e.target.closest("[data-delete-hypothesis]")?.dataset.deleteHypothesis;
+  if (deleteHypothesisId) deleteHypothesis(deleteHypothesisId);
   const ds = e.target.closest("[data-delete-sphere]")?.dataset.deleteSphere;
   if (ds) { const sp=S.spheres.find(s=>s.id===ds); if(sp&&(S.quests.some(q=>q.sphere===sp.name)||S.bossFights.some(b=>b.sphere===sp.name))){toast("Сфера используется в квестах.");return;} if(!confirm("Удалить сферу?"))return; S.spheres=S.spheres.filter(s=>s.id!==ds); save(); render(); }
   const dst = e.target.closest("[data-delete-stat]")?.dataset.deleteStat;
@@ -1860,6 +2020,7 @@ function handleForm(form) {
   if (form.matches('[data-form="quick-sphere"],[data-form="sphere"]')) { const n=fieldValue("name"); if(n&&!byName(S.spheres,n)) S.spheres.push({id:uid(),name:n,level:1,xp:0,active:true}); toast("Сфера добавлена."); }
   if (form.matches('[data-form="quick-stat"],[data-form="stat"]')) { const n=fieldValue("name"); if(n&&!byName(S.stats,n)) S.stats.push({id:uid(),name:n,level:1,xp:0,active:true}); toast("Стат добавлен."); }
   if (form.matches('[data-form="quest"]')) { syncQuestDraft(form); createQuest(d, form); S.drafts.quest = {}; toast("Квест создан."); }
+  if (form.matches('[data-form="hypothesis"]')) { if (!createHypothesis(d, form)) return; toast("Гипотеза добавлена."); }
   if (form.matches('[data-form="reward"]')) { createReward(d, form); toast("Награда создана."); }
   if (form.matches('[data-form="branding"]')) {
     saveBrandingForm(form);
